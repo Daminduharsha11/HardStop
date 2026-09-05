@@ -5,33 +5,44 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
+import android.graphics.drawable.Drawable
 import android.os.Build
 import android.os.Bundle
 import android.os.Process
 import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.animation.*
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.graphics.drawable.toBitmap
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import com.example.detox.data.DetoxPreferences
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 data class InstalledApp(
     val packageName: String,
-    val label: String
+    val label: String,
+    val icon: Drawable?
 )
 
 class MainActivity : ComponentActivity() {
@@ -42,7 +53,15 @@ class MainActivity : ComponentActivity() {
         preferences = DetoxPreferences(this)
 
         setContent {
-            MaterialTheme {
+            val isDark = isSystemInDarkTheme()
+            val colorScheme = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                val context = LocalContext.current
+                if (isDark) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
+            } else {
+                if (isDark) darkColorScheme() else lightColorScheme()
+            }
+
+            MaterialTheme(colorScheme = colorScheme) {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
@@ -76,20 +95,29 @@ fun hasUsageStatsPermission(context: Context): Boolean {
 @Composable
 fun DualRuleDashboardScreen(preferences: DetoxPreferences) {
     val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
     var selectedTab by remember { mutableIntStateOf(0) }
     var hasPermission by remember { mutableStateOf(hasUsageStatsPermission(context)) }
     val tabs = listOf("Hourly Limit", "Night Block")
 
-    // Check permission state when user resumes/interacts
-    LaunchedEffect(Unit) {
-        hasPermission = hasUsageStatsPermission(context)
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                hasPermission = hasUsageStatsPermission(context)
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
-        // --- Usage Access Permission Warning Banner ---
-        if (!hasPermission) {
+        AnimatedVisibility(
+            visible = !hasPermission,
+            enter = fadeIn() + expandVertically(),
+            exit = fadeOut() + shrinkVertically()
+        ) {
             Card(
-                colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF3CD)),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
                 shape = RoundedCornerShape(0.dp),
                 modifier = Modifier.fillMaxWidth()
             ) {
@@ -103,7 +131,7 @@ fun DualRuleDashboardScreen(preferences: DetoxPreferences) {
                     Text(
                         text = "Usage Access required to track screen time",
                         fontSize = 12.sp,
-                        color = Color(0xFF856404),
+                        color = MaterialTheme.colorScheme.onErrorContainer,
                         fontWeight = FontWeight.Medium
                     )
                     TextButton(
@@ -111,7 +139,7 @@ fun DualRuleDashboardScreen(preferences: DetoxPreferences) {
                             context.startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS))
                         }
                     ) {
-                        Text("Grant", fontWeight = FontWeight.Bold, color = Color(0xFF856404))
+                        Text("Grant", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onErrorContainer)
                     }
                 }
             }
@@ -127,9 +155,15 @@ fun DualRuleDashboardScreen(preferences: DetoxPreferences) {
             }
         }
 
-        when (selectedTab) {
-            0 -> HourlyRuleScreen(preferences)
-            1 -> NightRuleScreen(preferences)
+        AnimatedContent(
+            targetState = selectedTab,
+            transitionSpec = { fadeIn() togetherWith fadeOut() },
+            label = "TabTransition"
+        ) { tabIndex ->
+            when (tabIndex) {
+                0 -> HourlyRuleScreen(preferences)
+                1 -> NightRuleScreen(preferences)
+            }
         }
     }
 }
@@ -150,7 +184,11 @@ fun DayOfWeekSelector(
             FilterChip(
                 selected = isSelected,
                 onClick = { onDayToggled(dayNumber) },
-                label = { Text(label, fontSize = 12.sp, fontWeight = FontWeight.Bold) },
+                label = { 
+                    Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                        Text(label, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    }
+                },
                 modifier = Modifier
                     .weight(1f)
                     .padding(horizontal = 2.dp)
@@ -165,6 +203,9 @@ fun HourlyRuleScreen(preferences: DetoxPreferences) {
     var allowanceMins by remember { mutableIntStateOf(preferences.getAllowanceMins()) }
     var activeDays by remember { mutableStateOf(preferences.getHourlyDays()) }
     var selectedApps by remember { mutableStateOf(preferences.getHourlyApps()) }
+    
+    var showCustomWindowDialog by remember { mutableStateOf(false) }
+    var showCustomAllowanceDialog by remember { mutableStateOf(false) }
     var showAppPicker by remember { mutableStateOf(false) }
 
     Column(
@@ -172,7 +213,7 @@ fun HourlyRuleScreen(preferences: DetoxPreferences) {
             .fillMaxSize()
             .padding(20.dp)
     ) {
-        Text("Usage Window & Limit", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+        Text("Usage Window & Limit", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = MaterialTheme.colorScheme.primary)
         Spacer(modifier = Modifier.height(12.dp))
 
         Card(
@@ -180,10 +221,13 @@ fun HourlyRuleScreen(preferences: DetoxPreferences) {
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
-                Text("Reset Window Period", fontSize = 13.sp, color = Color.Gray, fontWeight = FontWeight.SemiBold)
+                Text("Reset Window Period", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.SemiBold)
                 Spacer(modifier = Modifier.height(6.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    listOf(60 to "Every 1 hr", 120 to "Every 2 hrs").forEach { (mins, label) ->
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    listOf(60 to "1 hr", 120 to "2 hrs").forEach { (mins, label) ->
                         FilterChip(
                             selected = windowMins == mins,
                             onClick = {
@@ -193,14 +237,22 @@ fun HourlyRuleScreen(preferences: DetoxPreferences) {
                             label = { Text(label) }
                         )
                     }
+                    FilterChip(
+                        selected = windowMins != 60 && windowMins != 120,
+                        onClick = { showCustomWindowDialog = true },
+                        label = { Text(if (windowMins != 60 && windowMins != 120) "$windowMins mins" else "Custom...") }
+                    )
                 }
 
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(16.dp))
 
-                Text("Allowed Usage Per Window", fontSize = 13.sp, color = Color.Gray, fontWeight = FontWeight.SemiBold)
+                Text("Allowed Usage Per Period", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.SemiBold)
                 Spacer(modifier = Modifier.height(6.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    listOf(10 to "10 mins", 15 to "15 mins", 30 to "30 mins").forEach { (mins, label) ->
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    listOf(15 to "15 mins", 30 to "30 mins").forEach { (mins, label) ->
                         FilterChip(
                             selected = allowanceMins == mins,
                             onClick = {
@@ -210,17 +262,23 @@ fun HourlyRuleScreen(preferences: DetoxPreferences) {
                             label = { Text(label) }
                         )
                     }
+                    FilterChip(
+                        selected = allowanceMins != 15 && allowanceMins != 30,
+                        onClick = { showCustomAllowanceDialog = true },
+                        label = { Text(if (allowanceMins != 15 && allowanceMins != 30) "$allowanceMins mins" else "Custom...") }
+                    )
                 }
             }
         }
 
         Spacer(modifier = Modifier.height(20.dp))
 
-        Text("Active Days", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+        Text("Active Days", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = MaterialTheme.colorScheme.primary)
         Spacer(modifier = Modifier.height(8.dp))
         DayOfWeekSelector(selectedDays = activeDays) { day ->
-            activeDays = if (activeDays.contains(day)) activeDays - day else activeDays + day
-            preferences.setHourlyDays(activeDays)
+            val updated = if (activeDays.contains(day)) activeDays - day else activeDays + day
+            activeDays = updated
+            preferences.setHourlyDays(updated)
         }
 
         Spacer(modifier = Modifier.height(20.dp))
@@ -238,14 +296,14 @@ fun HourlyRuleScreen(preferences: DetoxPreferences) {
 
         if (selectedApps.isEmpty()) {
             Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
-                Text("No apps assigned to hourly rule.", color = Color.Gray)
+                Text("No apps assigned to hourly rule.", color = MaterialTheme.colorScheme.outline)
             }
         } else {
             LazyColumn(
                 modifier = Modifier.weight(1f),
                 verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                items(selectedApps.toList()) { pkg ->
+                items(selectedApps.toList(), key = { it }) { pkg ->
                     Card(modifier = Modifier.fillMaxWidth()) {
                         Row(
                             modifier = Modifier
@@ -256,10 +314,11 @@ fun HourlyRuleScreen(preferences: DetoxPreferences) {
                         ) {
                             Text(text = pkg, fontSize = 14.sp, fontWeight = FontWeight.Medium)
                             IconButton(onClick = {
-                                selectedApps = selectedApps - pkg
-                                preferences.setHourlyApps(selectedApps)
+                                val updated = selectedApps - pkg
+                                selectedApps = updated
+                                preferences.setHourlyApps(updated)
                             }) {
-                                Text("✕", color = Color.Gray)
+                                Text("✕", color = MaterialTheme.colorScheme.outline)
                             }
                         }
                     }
@@ -268,33 +327,72 @@ fun HourlyRuleScreen(preferences: DetoxPreferences) {
         }
     }
 
+    if (showCustomWindowDialog) {
+        InputDialog(
+            title = "Set Reset Window (Minutes)",
+            initialValue = windowMins.toString(),
+            onDismiss = { showCustomWindowDialog = false },
+            onConfirm = { mins ->
+                mins.toIntOrNull()?.let {
+                    if (it > 0) {
+                        windowMins = it
+                        preferences.setUsageWindowMins(it)
+                    }
+                }
+                showCustomWindowDialog = false
+            }
+        )
+    }
+
+    if (showCustomAllowanceDialog) {
+        InputDialog(
+            title = "Set Allowed Usage (Minutes)",
+            initialValue = allowanceMins.toString(),
+            onDismiss = { showCustomAllowanceDialog = false },
+            onConfirm = { mins ->
+                mins.toIntOrNull()?.let {
+                    if (it > 0) {
+                        allowanceMins = it
+                        preferences.setAllowanceMins(it)
+                    }
+                }
+                showCustomAllowanceDialog = false
+            }
+        )
+    }
+
     if (showAppPicker) {
         AppPickerBottomSheet(
             selectedPackages = selectedApps,
             onPackageToggled = { pkg ->
-                selectedApps = if (selectedApps.contains(pkg)) selectedApps - pkg else selectedApps + pkg
-                preferences.setHourlyApps(selectedApps)
+                val updated = if (selectedApps.contains(pkg)) selectedApps - pkg else selectedApps + pkg
+                selectedApps = updated
+                preferences.setHourlyApps(updated)
             },
             onDismissRequest = { showAppPicker = false }
         )
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun NightRuleScreen(preferences: DetoxPreferences) {
     var activeDays by remember { mutableStateOf(preferences.getNightDays()) }
     var selectedApps by remember { mutableStateOf(preferences.getNightApps()) }
     var showAppPicker by remember { mutableStateOf(false) }
 
-    val (startHour, startMin) = preferences.getNightStart()
-    val (endHour, endMin) = preferences.getNightEnd()
+    var (startHour, startMin) = preferences.getNightStart()
+    var (endHour, endMin) = preferences.getNightEnd()
+
+    var showStartPicker by remember { mutableStateOf(false) }
+    var showEndPicker by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier
             .fillMaxSize()
             .padding(20.dp)
     ) {
-        Text("Scheduled Night Lock", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+        Text("Scheduled Night Lock", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = MaterialTheme.colorScheme.primary)
         Spacer(modifier = Modifier.height(12.dp))
 
         Card(
@@ -302,24 +400,61 @@ fun NightRuleScreen(preferences: DetoxPreferences) {
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
-                Text("Lock Active Window (Combines All Apps)", fontSize = 13.sp, color = Color.Gray, fontWeight = FontWeight.SemiBold)
-                Spacer(modifier = Modifier.height(6.dp))
-                Text(
-                    text = String.format("%02d:%02d  ➜  %02d:%02d", startHour, startMin, endHour, endMin),
-                    fontSize = 22.sp,
-                    fontWeight = FontWeight.ExtraBold,
-                    color = Color(0xFFD32F2F)
-                )
+                Text("Lock Window", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.SemiBold)
+                Spacer(modifier = Modifier.height(12.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceEvenly,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Card(
+                        onClick = { showStartPicker = true },
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text("Start Time", fontSize = 11.sp, color = MaterialTheme.colorScheme.outline)
+                            Text(
+                                text = String.format("%02d:%02d", startHour, startMin),
+                                fontSize = 22.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+
+                    Text("➜", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+
+                    Card(
+                        onClick = { showEndPicker = true },
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text("End Time", fontSize = 11.sp, color = MaterialTheme.colorScheme.outline)
+                            Text(
+                                text = String.format("%02d:%02d", endHour, endMin),
+                                fontSize = 22.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                }
             }
         }
 
         Spacer(modifier = Modifier.height(20.dp))
 
-        Text("Active Days", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+        Text("Active Days", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = MaterialTheme.colorScheme.primary)
         Spacer(modifier = Modifier.height(8.dp))
         DayOfWeekSelector(selectedDays = activeDays) { day ->
-            activeDays = if (activeDays.contains(day)) activeDays - day else activeDays + day
-            preferences.setNightDays(activeDays)
+            val updated = if (activeDays.contains(day)) activeDays - day else activeDays + day
+            activeDays = updated
+            preferences.setNightDays(updated)
         }
 
         Spacer(modifier = Modifier.height(20.dp))
@@ -337,14 +472,14 @@ fun NightRuleScreen(preferences: DetoxPreferences) {
 
         if (selectedApps.isEmpty()) {
             Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
-                Text("No apps assigned to night block.", color = Color.Gray)
+                Text("No apps assigned to night block.", color = MaterialTheme.colorScheme.outline)
             }
         } else {
             LazyColumn(
                 modifier = Modifier.weight(1f),
                 verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                items(selectedApps.toList()) { pkg ->
+                items(selectedApps.toList(), key = { it }) { pkg ->
                     Card(modifier = Modifier.fillMaxWidth()) {
                         Row(
                             modifier = Modifier
@@ -355,10 +490,11 @@ fun NightRuleScreen(preferences: DetoxPreferences) {
                         ) {
                             Text(text = pkg, fontSize = 14.sp, fontWeight = FontWeight.Medium)
                             IconButton(onClick = {
-                                selectedApps = selectedApps - pkg
-                                preferences.setNightApps(selectedApps)
+                                val updated = selectedApps - pkg
+                                selectedApps = updated
+                                preferences.setNightApps(updated)
                             }) {
-                                Text("✕", color = Color.Gray)
+                                Text("✕", color = MaterialTheme.colorScheme.outline)
                             }
                         }
                     }
@@ -367,16 +503,85 @@ fun NightRuleScreen(preferences: DetoxPreferences) {
         }
     }
 
+    if (showStartPicker) {
+        val timePickerState = rememberTimePickerState(initialHour = startHour, initialMinute = startMin, is24Hour = true)
+        AlertDialog(
+            onDismissRequest = { showStartPicker = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    preferences.setNightStart(timePickerState.hour, timePickerState.minute)
+                    showStartPicker = false
+                }) { Text("Set") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showStartPicker = false }) { Text("Cancel") }
+            },
+            text = { TimePicker(state = timePickerState) }
+        )
+    }
+
+    if (showEndPicker) {
+        val timePickerState = rememberTimePickerState(initialHour = endHour, initialMinute = endMin, is24Hour = true)
+        AlertDialog(
+            onDismissRequest = { showEndPicker = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    preferences.setNightEnd(timePickerState.hour, timePickerState.minute)
+                    showEndPicker = false
+                }) { Text("Set") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showEndPicker = false }) { Text("Cancel") }
+            },
+            text = { TimePicker(state = timePickerState) }
+        )
+    }
+
     if (showAppPicker) {
         AppPickerBottomSheet(
             selectedPackages = selectedApps,
             onPackageToggled = { pkg ->
-                selectedApps = if (selectedApps.contains(pkg)) selectedApps - pkg else selectedApps + pkg
-                preferences.setNightApps(selectedApps)
+                val updated = if (selectedApps.contains(pkg)) selectedApps - pkg else selectedApps + pkg
+                selectedApps = updated
+                preferences.setNightApps(updated)
             },
             onDismissRequest = { showAppPicker = false }
         )
     }
+}
+
+@Composable
+fun InputDialog(
+    title: String,
+    initialValue: String,
+    onDismiss: () -> Unit,
+    onConfirm: (String) -> Unit
+) {
+    var text by remember { mutableStateOf(initialValue) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title, fontSize = 16.sp, fontWeight = FontWeight.Bold) },
+        text = {
+            OutlinedTextField(
+                value = text,
+                onValueChange = { text = it.filter { char -> char.isDigit() } },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth()
+            )
+        },
+        confirmButton = {
+            Button(onClick = { onConfirm(text) }) {
+                Text("Set")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -393,15 +598,38 @@ fun AppPickerBottomSheet(
     LaunchedEffect(Unit) {
         withContext(Dispatchers.IO) {
             val pm = context.packageManager
-            val apps = pm.getInstalledApplications(PackageManager.GET_META_DATA)
-                .filter { (it.flags and ApplicationInfo.FLAG_SYSTEM) == 0 || (it.flags and ApplicationInfo.FLAG_UPDATED_SYSTEM_APP) != 0 }
-                .map { appInfo ->
-                    InstalledApp(
-                        packageName = appInfo.packageName,
-                        label = pm.getApplicationLabel(appInfo).toString()
-                    )
+            
+            // Query all apps that can be launched from the homescreen
+            val mainIntent = Intent(Intent.ACTION_MAIN, null).apply {
+                addCategory(Intent.CATEGORY_LAUNCHER)
+            }
+            
+            val resolveInfos = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                pm.queryIntentActivities(mainIntent, PackageManager.ResolveInfoFlags.of(0L))
+            } else {
+                @Suppress("DEPRECATION")
+                pm.queryIntentActivities(mainIntent, 0)
+            }
+
+            // Process list off the main thread to prevent UI freezing
+            val apps = resolveInfos.mapNotNull { resolveInfo ->
+                val pkgName = resolveInfo.activityInfo.packageName
+                val label = resolveInfo.loadLabel(pm).toString()
+                
+                // Fetch icon smoothly
+                val icon = try {
+                    resolveInfo.loadIcon(pm)
+                } catch (e: Exception) {
+                    null
                 }
-                .sortedBy { it.label.lowercase() }
+                
+                InstalledApp(
+                    packageName = pkgName,
+                    label = label,
+                    icon = icon
+                )
+            }.distinctBy { it.packageName }
+             .sortedBy { it.label.lowercase() }
 
             installedApps = apps
             isLoading = false
@@ -415,7 +643,7 @@ fun AppPickerBottomSheet(
                 .padding(16.dp)
         ) {
             Text(
-                text = "Select Applications",
+                text = "Select Applications (${installedApps.size})",
                 fontSize = 18.sp,
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.padding(bottom = 12.dp)
@@ -425,38 +653,58 @@ fun AppPickerBottomSheet(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(200.dp),
+                        .height(250.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     CircularProgressIndicator()
                 }
             } else {
                 LazyColumn(
-                    modifier = Modifier.fillMaxHeight(0.6f),
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                    modifier = Modifier.fillMaxHeight(0.65f),
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
-                    items(installedApps, key = { it.packageName }) { app ->
+                    items(
+                        items = installedApps,
+                        key = { it.packageName }
+                    ) { app ->
                         val isSelected = selectedPackages.contains(app.packageName)
+                        
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clickable { onPackageToggled(app.packageName) }
-                                .padding(vertical = 8.dp, horizontal = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
+                                .padding(vertical = 6.dp, horizontal = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
+                            // Render icon directly from memory cache
+                            app.icon?.let { iconDrawable ->
+                                val bitmap = remember(app.packageName) {
+                                    iconDrawable.toBitmap(48, 48).asImageBitmap()
+                                }
+                                Image(
+                                    bitmap = bitmap,
+                                    contentDescription = null,
+                                    modifier = Modifier
+                                        .size(40.dp)
+                                        .padding(end = 12.dp)
+                                )
+                            }
+                            
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
                                     text = app.label,
-                                    fontSize = 16.sp,
-                                    fontWeight = FontWeight.Medium
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    maxLines = 1
                                 )
                                 Text(
                                     text = app.packageName,
-                                    fontSize = 12.sp,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    fontSize = 11.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1
                                 )
                             }
+                            
                             Checkbox(
                                 checked = isSelected,
                                 onCheckedChange = { onPackageToggled(app.packageName) }
@@ -466,7 +714,7 @@ fun AppPickerBottomSheet(
                 }
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(12.dp))
 
             Button(
                 onClick = onDismissRequest,
