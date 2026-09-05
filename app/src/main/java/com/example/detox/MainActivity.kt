@@ -7,6 +7,7 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -19,6 +20,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.graphics.drawable.toBitmap
 import com.example.detox.engine.ShizukuPackageEngine
 import com.example.detox.model.AppInfo
+import com.example.detox.service.DetoxTimerService
 import rikka.shizuku.Shizuku
 
 class MainActivity : ComponentActivity() {
@@ -29,9 +31,7 @@ class MainActivity : ComponentActivity() {
         checkAndRequestPermission()
     }
 
-    private val binderDeadListener = Shizuku.OnBinderDeadListener {
-        // Handle binder disconnects
-    }
+    private val binderDeadListener = Shizuku.OnBinderDeadListener {}
 
     private val permissionResultListener = Shizuku.OnRequestPermissionResultListener { requestCode, grantResult ->
         if (requestCode == SHIZUKU_CODE && grantResult == PackageManager.PERMISSION_GRANTED) {
@@ -50,18 +50,11 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             MaterialTheme {
-                AppPickerScreen(
-                    onToggleSuspend = { packageName: String, shouldSuspend: Boolean ->
-                        val success = ShizukuPackageEngine.setPackageSuspended(packageName, shouldSuspend)
-                        if (success) {
-                            val status = if (shouldSuspend) "Suspended" else "Unsuspended"
-                            Toast.makeText(this, "$status $packageName", Toast.LENGTH_SHORT).show()
-                        } else {
-                            Toast.makeText(this, "Failed to execute Shizuku command", Toast.LENGTH_SHORT).show()
-                        }
-                        success
-                    },
-                    loadApps = { fetchInstalledApps() }
+                MainDashboardScreen(
+                    loadApps = { fetchInstalledApps() },
+                    onStartLock = { packages, minutes ->
+                        startLockSession(packages, minutes)
+                    }
                 )
             }
         }
@@ -72,6 +65,21 @@ class MainActivity : ComponentActivity() {
             if (Shizuku.checkSelfPermission() != PackageManager.PERMISSION_GRANTED) {
                 Shizuku.requestPermission(SHIZUKU_CODE)
             }
+        }
+    }
+
+    private fun startLockSession(packages: Set<String>, minutes: Int) {
+        var successCount = 0
+        packages.forEach { pkg ->
+            val ok = ShizukuPackageEngine.setPackageSuspended(pkg, true)
+            if (ok) successCount++
+        }
+
+        if (successCount > 0) {
+            DetoxTimerService.startService(this, ArrayList(packages), minutes)
+            Toast.makeText(this, "Locked $successCount apps for $minutes mins!", Toast.LENGTH_SHORT).show()
+        } else {
+            Toast.makeText(this, "Failed to lock apps. Check Shizuku status.", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -101,68 +109,181 @@ class MainActivity : ComponentActivity() {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AppPickerScreen(
-    onToggleSuspend: (String, Boolean) -> Boolean,
-    loadApps: () -> List<AppInfo>
+fun MainDashboardScreen(
+    loadApps: () -> List<AppInfo>,
+    onStartLock: (Set<String>, Int) -> Unit
 ) {
-    var appList by remember { mutableStateOf(loadApps()) }
+    var showAppPickerSheet by remember { mutableStateOf(false) }
+    var showTimerDialog by remember { mutableStateOf(false) }
+
+    val selectedPackages = remember { mutableStateListOf<String>() }
+    var selectedMinutes by remember { mutableIntStateOf(1) } // Default set to 1 min for quick testing
+    val appList by remember { mutableStateOf(loadApps()) }
 
     Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Aegis Detox") }
-            )
-        }
-    ) { paddingValues ->
-        LazyColumn(
+        topBar = { TopAppBar(title = { Text("Aegis Detox") }) }
+    ) { padding ->
+        Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(paddingValues)
+                .padding(padding)
+                .padding(24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
         ) {
-            items(appList, key = { it.packageName }) { app ->
-                AppRowItem(
-                    app = app,
-                    onToggle = { shouldSuspend: Boolean ->
-                        val success = onToggleSuspend(app.packageName, shouldSuspend)
-                        if (success) {
-                            appList = appList.map { item ->
-                                if (item.packageName == app.packageName) {
-                                    item.copy(isSuspended = shouldSuspend)
-                                } else item
-                            }
-                        }
-                    }
-                )
-                HorizontalDivider()
+            Text(
+                text = "Focus Control Center",
+                style = MaterialTheme.typography.headlineMedium
+            )
+            Spacer(modifier = Modifier.height(32.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                OutlinedButton(
+                    onClick = { showAppPickerSheet = true },
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text("Apps (${selectedPackages.size})")
+                }
+
+                OutlinedButton(
+                    onClick = { showTimerDialog = true },
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text("Timer (${selectedMinutes}m)")
+                }
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            Button(
+                onClick = { onStartLock(selectedPackages.toSet(), selectedMinutes) },
+                enabled = selectedPackages.isNotEmpty(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(50.dp)
+            ) {
+                Text("Start Focus Session")
             }
         }
+    }
+
+    if (showAppPickerSheet) {
+        ModalBottomSheet(onDismissRequest = { showAppPickerSheet = false }) {
+            AppPickerSheetContent(
+                appList = appList,
+                selectedPackages = selectedPackages,
+                onDone = { showAppPickerSheet = false }
+            )
+        }
+    }
+
+    if (showTimerDialog) {
+        AlertDialog(
+            onDismissRequest = { showTimerDialog = false },
+            title = { Text("Set Duration") },
+            text = {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    listOf(1, 15, 30, 60).forEach { mins ->
+                        FilterChip(
+                            selected = selectedMinutes == mins,
+                            onClick = { selectedMinutes = mins },
+                            label = { Text("${mins}m") }
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showTimerDialog = false }) {
+                    Text("Done")
+                }
+            }
+        )
     }
 }
 
 @Composable
-fun AppRowItem(
-    app: AppInfo,
-    onToggle: (Boolean) -> Unit
+fun AppPickerSheetContent(
+    appList: List<AppInfo>,
+    selectedPackages: MutableList<String>,
+    onDone: () -> Unit
 ) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(16.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Image(
-            bitmap = app.icon.toBitmap().asImageBitmap(),
-            contentDescription = app.name,
-            modifier = Modifier.size(48.dp)
-        )
-        Spacer(modifier = Modifier.width(16.dp))
-        Column(modifier = Modifier.weight(1f)) {
-            Text(text = app.name, style = MaterialTheme.typography.titleMedium)
-            Text(text = app.packageName, style = MaterialTheme.typography.bodySmall)
+    var searchQuery by remember { mutableStateOf("") }
+
+    val filteredApps = remember(searchQuery, appList) {
+        if (searchQuery.isBlank()) appList
+        else appList.filter {
+            it.name.contains(searchQuery, ignoreCase = true) ||
+            it.packageName.contains(searchQuery, ignoreCase = true)
         }
-        Switch(
-            checked = app.isSuspended,
-            onCheckedChange = { shouldSuspend: Boolean -> onToggle(shouldSuspend) }
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxHeight(0.85f)
+            .padding(16.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text("Select Distractions", style = MaterialTheme.typography.titleLarge)
+            Button(onClick = onDone) {
+                Text("Done")
+            }
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        OutlinedTextField(
+            value = searchQuery,
+            onValueChange = { searchQuery = it },
+            label = { Text("Search apps...") },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true
         )
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        LazyColumn(modifier = Modifier.weight(1f)) {
+            items(filteredApps, key = { it.packageName }) { app ->
+                val isSelected = selectedPackages.contains(app.packageName)
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable {
+                            if (isSelected) selectedPackages.remove(app.packageName)
+                            else selectedPackages.add(app.packageName)
+                        }
+                        .padding(vertical = 12.dp, horizontal = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Image(
+                        bitmap = app.icon.toBitmap().asImageBitmap(),
+                        contentDescription = app.name,
+                        modifier = Modifier.size(40.dp)
+                    )
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(app.name, style = MaterialTheme.typography.bodyLarge)
+                        Text(app.packageName, style = MaterialTheme.typography.bodySmall)
+                    }
+                    Checkbox(
+                        checked = isSelected,
+                        onCheckedChange = {
+                            if (isSelected) selectedPackages.remove(app.packageName)
+                            else selectedPackages.add(app.packageName)
+                        }
+                    )
+                }
+                HorizontalDivider()
+            }
+        }
     }
 }
