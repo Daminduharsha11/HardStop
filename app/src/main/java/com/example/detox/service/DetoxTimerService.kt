@@ -7,12 +7,14 @@ import android.os.Build
 import android.os.CountDownTimer
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
+import com.example.detox.data.DetoxPreferences
 import com.example.detox.engine.ShizukuPackageEngine
 
 class DetoxTimerService : Service() {
 
     private var countDownTimer: CountDownTimer? = null
     private var lockedPackages: ArrayList<String> = arrayListOf()
+    private lateinit var prefs: DetoxPreferences
 
     companion object {
         const val CHANNEL_ID = "AegisDetoxTimerChannel"
@@ -42,6 +44,7 @@ class DetoxTimerService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        prefs = DetoxPreferences(this)
         createNotificationChannel()
     }
 
@@ -51,8 +54,18 @@ class DetoxTimerService : Service() {
             val minutes = intent.getIntExtra(EXTRA_DURATION_MINUTES, 15)
             lockedPackages = pkgs
 
-            val durationMs = minutes * 60 * 1000L
-            startCountdown(durationMs)
+            // Save persistent session state
+            if (!prefs.isSessionActive()) {
+                prefs.saveSession(pkgs.toSet(), minutes)
+            }
+
+            val remainingMs = prefs.getRemainingMillis()
+            if (remainingMs > 0) {
+                startCountdown(remainingMs)
+            } else {
+                unlockAllPackages()
+                stopSelf()
+            }
         }
         return START_STICKY
     }
@@ -77,6 +90,7 @@ class DetoxTimerService : Service() {
                 unlockAllPackages()
                 isRunning = false
                 remainingSeconds = 0
+                prefs.clearSession()
                 stopForeground(STOP_FOREGROUND_REMOVE)
                 stopSelf()
             }
@@ -87,6 +101,7 @@ class DetoxTimerService : Service() {
         lockedPackages.forEach { pkg ->
             ShizukuPackageEngine.setPackageSuspended(pkg, false)
         }
+        prefs.clearSession()
     }
 
     private fun updateNotification(text: String) {
