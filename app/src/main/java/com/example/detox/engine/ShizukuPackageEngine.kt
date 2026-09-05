@@ -1,19 +1,41 @@
-package com.example.detox
+package com.example.detox.engine
 
-import android.app.Activity
-import android.os.Bundle
-import android.widget.TextView
+import rikka.shizuku.Shizuku
+import java.lang.reflect.Method
 
-class MainActivity : Activity() {
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        
-        val textView = TextView(this).apply {
-            text = "Aegis Detox Initialized\nShizuku Engine Ready"
-            textSize = 20f
-            setPadding(32, 32, 32, 32)
+object ShizukuPackageEngine {
+
+    fun isShizukuAvailable(): Boolean {
+        return try {
+            Shizuku.pingBinder() && Shizuku.checkSelfPermission() == android.content.pm.PackageManager.PERMISSION_GRANTED
+        } catch (e: Exception) {
+            false
         }
-        
-        setContentView(textView)
+    }
+
+    fun setPackageSuspended(packageName: String, suspend: Boolean): Boolean {
+        if (!isShizukuAvailable()) return false
+
+        return try {
+            val action = if (suspend) "suspend" else "unsuspend"
+            val command = arrayOf("pm", action, packageName)
+
+            // Access Shizuku.newProcess via reflection to bypass visibility restrictions
+            val newProcessMethod: Method = Shizuku::class.java.getDeclaredMethod(
+                "newProcess",
+                Array<String>::class.java,
+                Array<String>::class.java,
+                String::class.java
+            )
+            newProcessMethod.isAccessible = true
+
+            val process = newProcessMethod.invoke(null, command, null, null) as Process
+            val exitCode = process.waitFor()
+
+            exitCode == 0
+        } catch (e: Exception) {
+            e.printStackTrace()
+            false
+        }
     }
 }
