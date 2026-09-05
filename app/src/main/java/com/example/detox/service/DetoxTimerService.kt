@@ -3,6 +3,7 @@ package com.example.detox.service
 import android.app.*
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.CountDownTimer
 import android.os.IBinder
@@ -13,7 +14,7 @@ import com.example.detox.engine.ShizukuPackageEngine
 class DetoxTimerService : Service() {
 
     private var countDownTimer: CountDownTimer? = null
-    private var lockedPackages: ArrayList<String> = arrayListOf()
+    private var lockedPackages: Set<String> = emptySet()
     private lateinit var prefs: DetoxPreferences
 
     companion object {
@@ -21,18 +22,18 @@ class DetoxTimerService : Service() {
         const val NOTIFICATION_ID = 888
         const val ACTION_START = "ACTION_START"
         const val EXTRA_PACKAGES = "EXTRA_PACKAGES"
-        const val EXTRA_DURATION_MINUTES = "EXTRA_DURATION_MINUTES"
+        const val EXTRA_DURATION_MS = "EXTRA_DURATION_MS"
 
         var remainingSeconds = 0L
             private set
         var isRunning = false
             private set
 
-        fun startService(context: Context, packages: ArrayList<String>, minutes: Int) {
+        fun startService(context: Context, packages: ArrayList<String>, durationMs: Long) {
             val intent = Intent(context, DetoxTimerService::class.java).apply {
                 action = ACTION_START
                 putStringArrayListExtra(EXTRA_PACKAGES, packages)
-                putExtra(EXTRA_DURATION_MINUTES, minutes)
+                putExtra(EXTRA_DURATION_MS, durationMs)
             }
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 context.startForegroundService(intent)
@@ -49,24 +50,25 @@ class DetoxTimerService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        if (intent?.action == ACTION_START) {
-            val pkgs = intent.getStringArrayListExtra(EXTRA_PACKAGES) ?: arrayListOf()
-            val minutes = intent.getIntExtra(EXTRA_DURATION_MINUTES, 15)
-            lockedPackages = pkgs
+        val durationMs = intent?.getLongExtra(EXTRA_DURATION_MS, 0L) ?: 0L
+        val pkgsList = intent?.getStringArrayListExtra(EXTRA_PACKAGES)
 
-            // Save persistent session state
-            if (!prefs.isSessionActive()) {
-                prefs.saveSession(pkgs.toSet(), minutes)
-            }
-
-            val remainingMs = prefs.getRemainingMillis()
-            if (remainingMs > 0) {
-                startCountdown(remainingMs)
-            } else {
-                unlockAllPackages()
-                stopSelf()
-            }
+        // Sync with preferences
+        if (pkgsList != null && pkgsList.isNotEmpty()) {
+            lockedPackages = pkgsList.toSet()
+        } else {
+            lockedPackages = prefs.getLockedPackages()
         }
+
+        val remainingMs = if (durationMs > 0) durationMs else (prefs.getDetoxEndTime() - System.currentTimeMillis())
+
+        if (remainingMs > 0) {
+            startCountdown(remainingMs)
+        } else {
+            unlockAllPackages()
+            stopSelf()
+        }
+
         return START_STICKY
     }
 
@@ -74,15 +76,40 @@ class DetoxTimerService : Service() {
         countDownTimer?.cancel()
         isRunning = true
 
-        startForeground(NOTIFICATION_ID, buildNotification("Lock session starting..."))
+        val notification = buildNotification("Lock session starting...")
+
+        // Android 14+ Foreground Service Start Compliance
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                startForeground(
+                    NOTIFICATION_ID,
+                    notification,
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
+                )
+            } else {
+                startForeground(
+                    NOTIFICATION_ID,
+                    notification,
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
+                )
+            }
+        } else {
+            startForeground(NOTIFICATION_ID, notification)
+        }
 
         countDownTimer = object : CountDownTimer(durationMs, 1000) {
             override fun onTick(millisUntilFinished: Long) {
                 remainingSeconds = millisUntilFinished / 1000
-                val mins = remainingSeconds / 60
+                val hours = remainingSeconds / 3600
+                val mins = (remainingSeconds % 3600) / 60
                 val secs = remainingSeconds % 60
-                val timeStr = String.format("%02d:%02d", mins, secs)
-                
+
+                val timeStr = if (hours > 0) {
+                    String.format("%02d:%02d:%02d", hours, mins, secs)
+                } else {
+                    String.format("%02d:%02d", mins, secs)
+                }
+
                 updateNotification("Focus Mode Active: $timeStr remaining")
             }
 
@@ -90,7 +117,7 @@ class DetoxTimerService : Service() {
                 unlockAllPackages()
                 isRunning = false
                 remainingSeconds = 0
-                prefs.clearSession()
+                prefs.clearDetoxSession()
                 stopForeground(STOP_FOREGROUND_REMOVE)
                 stopSelf()
             }
@@ -98,10 +125,10 @@ class DetoxTimerService : Service() {
     }
 
     private fun unlockAllPackages() {
-        lockedPackages.forEach { pkg ->
-            ShizukuPackageEngine.setPackageSuspended(pkg, false)
+        if (lockedPackages.isNotEmpty()) {
+            ShizukuPackageEngine.unsuspendPackages(lockedPackages)
         }
-        prefs.clearSession()
+        prefs.clearDetoxSession()
     }
 
     private fun updateNotification(text: String) {

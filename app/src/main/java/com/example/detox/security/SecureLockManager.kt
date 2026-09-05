@@ -5,7 +5,6 @@ import android.os.SystemClock
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 import org.json.JSONArray
-import org.json.JSONObject
 
 class SecureLockManager(context: Context) {
 
@@ -17,7 +16,7 @@ class SecureLockManager(context: Context) {
         context,
         "aegis_secure_lock_prefs",
         masterKey,
-        EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SKEY_REQUEST,
+        EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
         EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
     )
 
@@ -47,9 +46,13 @@ class SecureLockManager(context: Context) {
         if (!prefs.getBoolean(KEY_SESSION_ACTIVE, false)) return false
         val targetEndTime = prefs.getLong(KEY_LOCK_END_ELAPSED_TIME, 0L)
         val currentTime = SystemClock.elapsedRealtime()
-        
+
         // If current elapsed time is past target end time, session has expired
-        return currentTime < targetEndTime
+        val active = currentTime < targetEndTime
+        if (!active) {
+            clearSession()
+        }
+        return active
     }
 
     fun getRemainingTimeMs(): Long {

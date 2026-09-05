@@ -13,6 +13,9 @@ object ShizukuPackageEngine {
         }
     }
 
+    /**
+     * Suspends a single package via Shizuku binder shell command.
+     */
     fun setPackageSuspended(packageName: String, suspend: Boolean): Boolean {
         if (!isShizukuAvailable()) return false
 
@@ -36,6 +39,24 @@ object ShizukuPackageEngine {
         } catch (e: Exception) {
             e.printStackTrace()
             false
+        }
+    }
+
+    /**
+     * Batch suspends a set of package names.
+     */
+    fun suspendPackages(packages: Set<String>) {
+        packages.forEach { pkg ->
+            setPackageSuspended(pkg, true)
+        }
+    }
+
+    /**
+     * Batch unsuspends a set of package names.
+     */
+    fun unsuspendPackages(packages: Set<String>) {
+        packages.forEach { pkg ->
+            setPackageSuspended(pkg, false)
         }
     }
 }
