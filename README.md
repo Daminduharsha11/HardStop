@@ -1,4 +1,4 @@
-# HardStop
+# Aegis Detox
 
 A lightweight, Material 3 Android digital detox application designed to enforce healthy screen-time habits. Aegis Detox offers granular hourly application usage limits and scheduled night locks with dynamic system integration.
 
