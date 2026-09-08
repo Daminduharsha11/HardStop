@@ -1,7 +1,8 @@
 package com.example.detox.ui
 
-import android.content.pm.ApplicationInfo
-import android.content.pm.PackageManager
+import android.content.Intent
+import android.graphics.drawable.Drawable
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -10,16 +11,19 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.graphics.drawable.toBitmap
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 data class InstalledApp(
     val packageName: String,
-    val label: String
+    val label: String,
+    val icon: Drawable? = null
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -33,18 +37,25 @@ fun AppPickerBottomSheet(
     var installedApps by remember { mutableStateOf<List<InstalledApp>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
 
-    // Load installed user apps asynchronously
     LaunchedEffect(Unit) {
         withContext(Dispatchers.IO) {
             val pm = context.packageManager
-            val apps = pm.getInstalledApplications(PackageManager.GET_META_DATA)
-                .filter { (it.flags and ApplicationInfo.FLAG_SYSTEM) == 0 || (it.flags and ApplicationInfo.FLAG_UPDATED_SYSTEM_APP) != 0 }
-                .map { appInfo ->
+            val mainIntent = Intent(Intent.ACTION_MAIN, null).apply {
+                addCategory(Intent.CATEGORY_LAUNCHER)
+            }
+            
+            // Query only launcher apps to eliminate background/system services cleanly
+            val apps = pm.queryIntentActivities(mainIntent, 0)
+                .map { resolveInfo ->
+                    val appInfo = resolveInfo.activityInfo.applicationInfo
                     InstalledApp(
                         packageName = appInfo.packageName,
-                        label = pm.getApplicationLabel(appInfo).toString()
+                        label = pm.getApplicationLabel(appInfo).toString(),
+                        icon = try { pm.getApplicationIcon(appInfo) } catch (_: Exception) { null }
                     )
                 }
+                .filter { it.packageName != context.packageName } // Exclude self
+                .distinctBy { it.packageName }
                 .sortedBy { it.label.lowercase() }
 
             installedApps = apps
@@ -88,9 +99,18 @@ fun AppPickerBottomSheet(
                                 .fillMaxWidth()
                                 .clickable { onPackageToggled(app.packageName) }
                                 .padding(vertical = 8.dp, horizontal = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
+                            app.icon?.let { icon ->
+                                Image(
+                                    bitmap = remember(icon) { icon.toBitmap(48, 48).asImageBitmap() },
+                                    contentDescription = null,
+                                    modifier = Modifier
+                                        .size(36.dp)
+                                        .padding(end = 12.dp)
+                                )
+                            }
+                            
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
                                     text = app.label,
@@ -103,6 +123,7 @@ fun AppPickerBottomSheet(
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
+                            
                             Checkbox(
                                 checked = isSelected,
                                 onCheckedChange = { onPackageToggled(app.packageName) }

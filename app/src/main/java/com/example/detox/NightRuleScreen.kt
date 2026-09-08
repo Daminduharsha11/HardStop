@@ -1,18 +1,20 @@
 package com.example.detox
 
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.ArrowForward
+import androidx.compose.material.icons.outlined.Nightlight
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.setValue
 import com.example.detox.data.DetoxPreferences
+import com.example.detox.ui.AppPickerBottomSheet
+import com.example.detox.ui.DayOfWeekSelector
+import com.example.detox.ui.RuleAppListSection
+import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -21,7 +23,6 @@ fun NightRuleScreen(preferences: DetoxPreferences) {
     var selectedApps by remember { mutableStateOf<Set<String>>(preferences.getNightApps()) }
     var showAppPicker by remember { mutableStateOf(false) }
 
-    // Read initial times into state wrappers so updates cause a trigger re-render
     val initialStart = preferences.getNightStart()
     var startHour by remember { mutableIntStateOf(initialStart.first) }
     var startMin by remember { mutableIntStateOf(initialStart.second) }
@@ -33,152 +34,156 @@ fun NightRuleScreen(preferences: DetoxPreferences) {
     var showStartPicker by remember { mutableStateOf(false) }
     var showEndPicker by remember { mutableStateOf(false) }
 
-    Column(modifier = Modifier.fillMaxSize()) {
-        //UsagePermissionBanner()
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 20.dp)
+    ) {
+        Spacer(modifier = Modifier.height(16.dp))
 
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(20.dp)
-        ) {
-            Text(
-                text = "Scheduled Night Lock",
-                fontWeight = FontWeight.Bold,
-                fontSize = 18.sp,
-                color = MaterialTheme.colorScheme.primary
+        // Header Section
+        Text(
+            text = "Scheduled Night Lock",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.primary
+        )
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        // Schedule Configuration Card
+        ElevatedCard(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.elevatedCardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceContainerLow
             )
-            Spacer(modifier = Modifier.height(12.dp))
-
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Outlined.Nightlight,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
                     Text(
                         text = "Lock Window",
-                        fontSize = 13.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontWeight = FontWeight.SemiBold
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                    Spacer(modifier = Modifier.height(12.dp))
+                }
 
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceEvenly,
-                        verticalAlignment = Alignment.CenterVertically
+                Spacer(modifier = Modifier.height(16.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceEvenly,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // Start Time Block
+                    Surface(
+                        onClick = { showStartPicker = true },
+                        shape = MaterialTheme.shapes.medium,
+                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                        tonalElevation = 2.dp
                     ) {
-                        Card(
-                            onClick = { showStartPicker = true },
-                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                        Column(
+                            modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
                         ) {
-                            Column(
-                                modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
-                                horizontalAlignment = Alignment.CenterHorizontally
-                            ) {
-                                Text("Start Time", fontSize = 11.sp, color = MaterialTheme.colorScheme.outline)
-                                Text(
-                                    text = String.format("%02d:%02d", startHour, startMin),
-                                    fontSize = 22.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
-                            }
-                        }
-
-                        Text("➜", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-
-                        Card(
-                            onClick = { showEndPicker = true },
-                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-                        ) {
-                            Column(
-                                modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
-                                horizontalAlignment = Alignment.CenterHorizontally
-                            ) {
-                                Text("End Time", fontSize = 11.sp, color = MaterialTheme.colorScheme.outline)
-                                Text(
-                                    text = String.format("%02d:%02d", endHour, endMin),
-                                    fontSize = 22.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
-                            }
+                            Text(
+                                text = "Start Time",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.outline
+                            )
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = String.format(Locale.getDefault(), "%02d:%02d", startHour, startMin),
+                                style = MaterialTheme.typography.headlineMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
                         }
                     }
-                }
-            }
 
-            Spacer(modifier = Modifier.height(20.dp))
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Outlined.ArrowForward,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(24.dp)
+                    )
 
-            Text(
-                text = "Active Days",
-                fontWeight = FontWeight.Bold,
-                fontSize = 18.sp,
-                color = MaterialTheme.colorScheme.primary
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            DayOfWeekSelector(selectedDays = activeDays) { day ->
-                val updated = if (activeDays.contains(day)) activeDays - day else activeDays + day
-                activeDays = updated
-                preferences.setNightDays(updated)
-            }
-
-            Spacer(modifier = Modifier.height(20.dp))
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "Night Blocked Apps (${selectedApps.size})",
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 18.sp
-                )
-                TextButton(onClick = { showAppPicker = true }) {
-                    Text("+ Manage Apps")
-                }
-            }
-
-            if (selectedApps.isEmpty()) {
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxWidth(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text("No apps assigned to night block.", color = MaterialTheme.colorScheme.outline)
-                }
-            } else {
-                LazyColumn(
-                    modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    items(selectedApps.toList(), key = { it }) { pkg ->
-                        Card(modifier = Modifier.fillMaxWidth()) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 16.dp, vertical = 12.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(text = pkg, fontSize = 14.sp, fontWeight = FontWeight.Medium)
-                                IconButton(onClick = {
-                                    val updated = selectedApps - pkg
-                                    selectedApps = updated
-                                    preferences.setNightApps(updated)
-                                }) {
-                                    Text("✕", color = MaterialTheme.colorScheme.outline)
-                                }
-                            }
+                    // End Time Block
+                    Surface(
+                        onClick = { showEndPicker = true },
+                        shape = MaterialTheme.shapes.medium,
+                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                        tonalElevation = 2.dp
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text(
+                                text = "End Time",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.outline
+                            )
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = String.format(Locale.getDefault(), "%02d:%02d", endHour, endMin),
+                                style = MaterialTheme.typography.headlineMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
                         }
                     }
                 }
             }
         }
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        // Days Selector Section
+        Text(
+            text = "Active Days",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.primary
+        )
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        DayOfWeekSelector(selectedDays = activeDays) { day ->
+            val updated = if (activeDays.contains(day)) activeDays - day else activeDays + day
+            activeDays = updated
+            preferences.setNightDays(updated)
+        }
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        // Shared RuleAppListSection component for consistent spacing & styling
+        RuleAppListSection(
+            title = "Night Blocked Apps",
+            emptyText = "No apps assigned to night block",
+            selectedApps = selectedApps,
+            onManageClick = { showAppPicker = true },
+            onRemoveApp = { pkg ->
+                val updated = selectedApps - pkg
+                selectedApps = updated
+                preferences.setNightApps(updated)
+            },
+            modifier = Modifier.weight(1f)
+        )
     }
 
     if (showStartPicker) {
-        val timePickerState = rememberTimePickerState(initialHour = startHour, initialMinute = startMin, is24Hour = true)
+        val timePickerState = rememberTimePickerState(
+            initialHour = startHour,
+            initialMinute = startMin,
+            is24Hour = true
+        )
         AlertDialog(
             onDismissRequest = { showStartPicker = false },
             confirmButton = {
@@ -197,7 +202,11 @@ fun NightRuleScreen(preferences: DetoxPreferences) {
     }
 
     if (showEndPicker) {
-        val timePickerState = rememberTimePickerState(initialHour = endHour, initialMinute = endMin, is24Hour = true)
+        val timePickerState = rememberTimePickerState(
+            initialHour = endHour,
+            initialMinute = endMin,
+            is24Hour = true
+        )
         AlertDialog(
             onDismissRequest = { showEndPicker = false },
             confirmButton = {

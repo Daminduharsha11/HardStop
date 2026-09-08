@@ -1,4 +1,4 @@
-package com.example.detox
+package com.example.detox.ui
 
 import android.content.Context
 import android.content.Intent
@@ -12,23 +12,26 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 
 @Composable
-fun UsagePermissionBanner(context: Context = LocalContext.current) {
+fun UsagePermissionBanner(
+    hasUsagePermission: (Context) -> Boolean,
+    context: Context = LocalContext.current
+) {
     val lifecycleOwner = LocalLifecycleOwner.current
-    var hasPermission by remember { mutableStateOf(hasUsageStatsPermission(context)) }
+    var hasPermission by remember { mutableStateOf(hasUsagePermission(context)) }
 
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
-                hasPermission = hasUsageStatsPermission(context)
+                hasPermission = hasUsagePermission(context)
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
