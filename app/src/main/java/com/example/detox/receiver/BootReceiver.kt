@@ -21,9 +21,12 @@ class BootReceiver : BroadcastReceiver() {
                 val remainingMs = prefs.getDetoxEndTime() - System.currentTimeMillis()
 
                 if (remainingMs > 0 && lockedApps.isNotEmpty()) {
+                    // Instantiate engine with Context
+                    val shizukuEngine = ShizukuPackageEngine(context.applicationContext)
+
                     // Re-suspend packages via Shizuku
-                    if (ShizukuPackageEngine.isShizukuAvailable()) {
-                        ShizukuPackageEngine.suspendPackages(lockedApps)
+                    if (shizukuEngine.isShizukuAvailable()) {
+                        shizukuEngine.suspendPackages(lockedApps)
                     }
 
                     // Restart timer service with explicit ArrayList<String> type

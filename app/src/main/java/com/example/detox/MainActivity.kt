@@ -9,6 +9,7 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Process
 import android.provider.Settings
+import android.util.Log
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -42,7 +43,11 @@ import androidx.lifecycle.LifecycleEventObserver
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import com.example.detox.data.DetoxPreferences
+import com.example.detox.engine.ShizukuPackageEngine
+import com.example.detox.ui.screens.HourlyRuleScreen
+import com.example.detox.ui.screens.NightRuleScreen
 import com.example.detox.ui.screens.SettingsScreen
+import rikka.shizuku.Shizuku
 
 data class InstalledApp(
     val packageName: String,
@@ -52,10 +57,44 @@ data class InstalledApp(
 
 class MainActivity : ComponentActivity() {
     private lateinit var preferences: DetoxPreferences
+    lateinit var shizukuEngine: ShizukuPackageEngine
+        private set
+
+    private var isShizukuGrantedState = mutableStateOf(false)
+
+    private val binderReceivedListener = Shizuku.OnBinderReceivedListener {
+        Log.d("Shizuku", "Binder received")
+        checkShizukuState()
+    }
+
+    private val binderDeadListener = Shizuku.OnBinderDeadListener {
+        Log.d("Shizuku", "Binder dead")
+        checkShizukuState()
+    }
+
+    private val permissionListener = Shizuku.OnRequestPermissionResultListener { requestCode, grantResult ->
+        if (requestCode == SHIZUKU_PERMISSION_REQUEST_CODE) {
+            val isGranted = grantResult == PackageManager.PERMISSION_GRANTED
+            isShizukuGrantedState.value = isGranted
+            if (isGranted) {
+                showToast(this, "Shizuku permission granted")
+            } else {
+                showToast(this, "Shizuku permission denied")
+            }
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         preferences = DetoxPreferences(this)
+        shizukuEngine = ShizukuPackageEngine(applicationContext)
+
+        // Register Shizuku event listeners
+        Shizuku.addBinderReceivedListener(binderReceivedListener)
+        Shizuku.addBinderDeadListener(binderDeadListener)
+        Shizuku.addRequestPermissionResultListener(permissionListener)
+
+        checkShizukuState()
 
         setContent {
             val context = LocalContext.current
@@ -125,6 +164,7 @@ class MainActivity : ComponentActivity() {
                                     1 -> NightRuleScreen(preferences = preferences)
                                     2 -> SettingsScreen(
                                         preferences = preferences,
+                                        shizukuEngine = shizukuEngine,
                                         onNavigateBack = { selectedTab = 0 }
                                     )
                                 }
@@ -134,6 +174,27 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        checkShizukuState()
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        Shizuku.removeBinderReceivedListener(binderReceivedListener)
+        Shizuku.removeBinderDeadListener(binderDeadListener)
+        Shizuku.removeRequestPermissionResultListener(permissionListener)
+    }
+
+    private fun checkShizukuState() {
+        val available = shizukuEngine.isShizukuAvailable()
+        isShizukuGrantedState.value = available
+    }
+
+    companion object {
+        const val SHIZUKU_PERMISSION_REQUEST_CODE = 1001
     }
 }
 
