@@ -28,6 +28,10 @@ class DetoxPreferences(context: Context) {
         private const val KEY_NIGHT_END_HOUR = "night_end_hour"
         private const val KEY_NIGHT_END_MIN = "night_end_min"
         private const val KEY_NIGHT_DAYS = "night_days"
+
+        // Settings Keys
+        private const val KEY_START_ON_BOOT = "start_on_boot"
+        private const val KEY_THEME_MODE = "theme_mode"
     }
 
     // --- Active Lock / Session Helpers ---
@@ -100,8 +104,16 @@ class DetoxPreferences(context: Context) {
     fun getNightDays(): Set<Int> = decodeIntSet(prefs.getString(KEY_NIGHT_DAYS, "[1,2,3,4,5,6,7]"))
     fun setNightDays(days: Set<Int>) = prefs.edit().putString(KEY_NIGHT_DAYS, encodeIntSet(days)).apply()
 
+    // --- App Settings Helpers ---
+    fun getStartOnBoot(): Boolean = prefs.getBoolean(KEY_START_ON_BOOT, false)
+    fun setStartOnBoot(enabled: Boolean) = prefs.edit().putBoolean(KEY_START_ON_BOOT, enabled).apply()
+
+    // Theme modes: 0 = System, 1 = Light, 2 = Dark, 3 = Pure Black
+    fun getThemeMode(): Int = prefs.getInt(KEY_THEME_MODE, 0)
+    fun setThemeMode(mode: Int) = prefs.edit().putInt(KEY_THEME_MODE, mode).apply()
+
     // --- Combined Lock & Active Window Evaluation ---
-    
+
     // Combines both Hourly and Night app lists during night hours
     fun getAllNightLockedApps(): Set<String> = getNightApps() + getHourlyApps()
 
