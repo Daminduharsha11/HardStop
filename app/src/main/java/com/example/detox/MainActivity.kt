@@ -142,6 +142,12 @@ class MainActivity : ComponentActivity() {
                                 icon = { Icon(Icons.Default.Settings, contentDescription = "Settings") },
                                 label = { Text("Settings") }
                             )
+                            NavigationBarItem(
+                                selected = selectedTab == 3,
+                                onClick = { selectedTab = 3 },
+                                icon = { Icon(Icons.Default.Settings, contentDescription = "Debug") },
+                                label = { Text("Debug") }
+                            )
                         }
                     }
                 ) { innerPadding ->
@@ -167,6 +173,8 @@ class MainActivity : ComponentActivity() {
                                         shizukuEngine = shizukuEngine,
                                         onNavigateBack = { selectedTab = 0 }
                                     )
+                                    3 -> DebugScreen(shizukuEngine = shizukuEngine)
+                                    
                                 }
                             }
                         }

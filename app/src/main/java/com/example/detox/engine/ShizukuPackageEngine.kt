@@ -65,56 +65,49 @@ class ShizukuPackageEngine(private val context: Context) {
     }
 
     /**
-     * Executes a command via Shizuku Process using reflection on the static Shizuku class method.
+     * Suspends or unsuspends a package using standard shell execution via Shizuku authorization.
      */
-    private fun execShizukuCommand(cmd: Array<String>): Process {
-        val newProcessMethod = Shizuku::class.java.getDeclaredMethod(
+    fun setPackageSuspended(packageName: String, suspend: Boolean): Boolean {
+    if (!isShizukuAvailable()) {
+        val diag = getDiagnostics()
+        Log.e(TAG, "Shizuku not ready: $diag")
+        showToast("Shizuku Not Ready:\n$diag")
+        return false
+    }
+
+    return try {
+        val action = if (suspend) "suspend" else "unsuspend"
+        val shellCommand = arrayOf("pm", action, "--user", "0", packageName)
+
+        // Invoke Shizuku.newProcess via reflection to safely bypass private visibility constraints
+        val method = Shizuku::class.java.getDeclaredMethod(
             "newProcess",
             Array<String>::class.java,
             Array<String>::class.java,
             String::class.java
         )
-        newProcessMethod.isAccessible = true
-        return newProcessMethod.invoke(null, cmd, null, null) as Process
-    }
+        method.isAccessible = true
+        val process = method.invoke(null, shellCommand, null, null) as Process
 
-    /**
-     * Suspends or unsuspends a package using Shizuku.
-     * Must be executed off the main thread.
-     */
-    fun setPackageSuspended(packageName: String, suspend: Boolean): Boolean {
-        if (!isShizukuAvailable()) {
-            val diag = getDiagnostics()
-            Log.e(TAG, "Shizuku not ready: $diag")
-            showToast("Shizuku Not Ready:\n$diag")
-            return false
+        val stdOutput = BufferedReader(InputStreamReader(process.inputStream)).use { it.readText().trim() }
+        val errorOutput = BufferedReader(InputStreamReader(process.errorStream)).use { it.readText().trim() }
+        val exitCode = process.waitFor()
+
+        val success = exitCode == 0
+        if (success) {
+            Log.d(TAG, "Success: $action $packageName -> $stdOutput")
+        } else {
+            Log.e(TAG, "Failed ($exitCode): $action $packageName -> $errorOutput")
+            showToast("FAILED ($exitCode): $packageName\nErr: $errorOutput")
         }
 
-        return try {
-            val action = if (suspend) "suspend" else "unsuspend"
-            val command = arrayOf("pm", action, "--user", "0", packageName)
-
-            // Safely execute using accessible reflection call
-            val process = execShizukuCommand(command)
-            val errorOutput = BufferedReader(InputStreamReader(process.errorStream)).readText().trim()
-            val stdOutput = BufferedReader(InputStreamReader(process.inputStream)).readText().trim()
-            val exitCode = process.waitFor()
-
-            val success = exitCode == 0
-            if (success) {
-                Log.d(TAG, "Success: $action $packageName -> $stdOutput")
-            } else {
-                Log.e(TAG, "Failed ($exitCode): $action $packageName -> $errorOutput")
-                showToast("FAILED ($exitCode): $packageName\nErr: $errorOutput")
-            }
-
-            success
-        } catch (e: Exception) {
-            Log.e(TAG, "Execution exception for $packageName", e)
-            showToast("Error: ${e.localizedMessage}")
-            false
-        }
+        success
+    } catch (e: Exception) {
+        Log.e(TAG, "Execution exception for $packageName", e)
+        showToast("Error: ${e.localizedMessage}")
+        false
     }
+}
 
     fun suspendPackages(packages: Set<String>) {
         if (packages.isEmpty()) return

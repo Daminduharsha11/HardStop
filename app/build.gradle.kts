@@ -41,7 +41,7 @@ android {
 }
 
 dependencies {
-    implementation("androidx.security:security-crypto:1.1.0-alpha06")
+implementation("androidx.security:security-crypto:1.1.0-alpha06")
     implementation("androidx.core:core-ktx:1.12.0")
     implementation("androidx.activity:activity-compose:1.8.2")
     
@@ -53,7 +53,7 @@ dependencies {
     implementation("androidx.compose.material:material-icons-extended")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
 
-    // Official Shizuku API (Works on Shizuku, Sui, and Shizuku+)
+    // Official Shizuku API (No JitPack required)
     implementation("dev.rikka.shizuku:api:13.1.5")
     implementation("dev.rikka.shizuku:provider:13.1.5")
 }
