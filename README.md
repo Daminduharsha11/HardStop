@@ -50,11 +50,4 @@ This is my first Android app, feedback, corrections, issues and PRs welcome. Ple
 
 ## License
 
-See [LICENSE](LICENSE).
-Ensure Shizuku is active and grant shell permissions when prompted.
-
-Configure your Pace limits and Freeze windows.
-
-License
-
-Distributed under the MIT License. See LICENSE for more information.
+Distributed under the MIT License. See [LICENSE](LICENSE) for more information.
