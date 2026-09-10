@@ -22,6 +22,7 @@ class DetoxPreferences(context: Context) {
         private const val KEY_ALLOWANCE_MINS = "allowance_mins"
         private const val KEY_HOURLY_DAYS = "hourly_days"
         private const val KEY_HOURLY_BLOCK_MAP = "hourly_block_until_map"
+        private const val KEY_HOURLY_CYCLE_START_MAP = "hourly_cycle_start_map"
 
         // Night Block Keys
         private const val KEY_NIGHT_APPS = "night_apps"
@@ -34,6 +35,24 @@ class DetoxPreferences(context: Context) {
         // Settings Keys
         private const val KEY_START_ON_BOOT = "start_on_boot"
         private const val KEY_THEME_MODE = "theme_mode"
+    }
+
+    fun getHourlyCycleStartMap(): MutableMap<String, Long> {
+    val raw = prefs.getString(KEY_HOURLY_CYCLE_START_MAP, null) ?: return mutableMapOf()
+    return try {
+        val obj = JSONObject(raw)
+        val map = mutableMapOf<String, Long>()
+        obj.keys().forEach { key -> map[key] = obj.getLong(key) }
+        map
+    } catch (e: Exception) {
+        mutableMapOf()
+    }
+    }
+
+fun setHourlyCycleStartMap(map: Map<String, Long>) {
+    val obj = JSONObject()
+    map.forEach { (k, v) -> obj.put(k, v) }
+    prefs.edit().putString(KEY_HOURLY_CYCLE_START_MAP, obj.toString()).apply()
     }
 
     // --- Active Lock / Session Helpers ---

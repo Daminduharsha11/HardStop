@@ -11,6 +11,7 @@ import androidx.core.app.NotificationCompat
 import com.example.detox.data.DetoxPreferences
 import com.example.detox.engine.ShizukuPackageEngine
 import java.util.Calendar
+import android.app.usage.UsageEvents
 
 class DetoxTimerService : Service() {
 
@@ -258,49 +259,6 @@ class DetoxTimerService : Service() {
         alarmManager.cancel(pendingIntent)
     }
 
-    private fun scheduleNextUnblockAlarm() {
-        val blockMap = prefs.getHourlyBlockUntilMap()
-        val alarmManager = getSystemService(Context.ALARM_SERVICE) as AlarmManager
-        val intent = Intent(this, DetoxTimerService::class.java).apply {
-            action = ACTION_EVALUATE_RULES
-        }
-        val pendingIntent = PendingIntent.getService(
-            this,
-            REQUEST_CODE_UNBLOCK,
-            intent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-
-        if (blockMap.isEmpty()) {
-            alarmManager.cancel(pendingIntent)
-            return
-        }
-
-        val earliestExpiry = blockMap.values.minOrNull() ?: return
-        val now = System.currentTimeMillis()
-
-        val targetTime = if (earliestExpiry <= now) now + 1000L else earliestExpiry
-
-        try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                alarmManager.setExactAndAllowWhileIdle(
-                    AlarmManager.RTC_WAKEUP,
-                    targetTime,
-                    pendingIntent
-                )
-            } else {
-                alarmManager.setExact(
-                    AlarmManager.RTC_WAKEUP,
-                    targetTime,
-                    pendingIntent
-                )
-            }
-            Log.d(TAG, "Scheduled exact unblock alarm for earliest expiry at $targetTime")
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to schedule exact unblock alarm", e)
-        }
-    }
-
     private fun cancelNextUnblockAlarm() {
         val alarmManager = getSystemService(Context.ALARM_SERVICE) as AlarmManager
         val intent = Intent(this, DetoxTimerService::class.java).apply {
@@ -342,6 +300,45 @@ class DetoxTimerService : Service() {
         scheduleNextNightAlarm()
     }
 
+    private fun getForegroundTimeMs(pkg: String, startTime: Long, endTime: Long): Long {
+        val usageManager = getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
+        val events = usageManager.queryEvents(startTime, endTime)
+        var totalTime = 0L
+        var lastResumeTime = -1L
+        val event = UsageEvents.Event()
+
+        while (events.hasNextEvent()) {
+            events.getNextEvent(event)
+            if (event.packageName != pkg) continue
+
+            when (event.eventType) {
+                UsageEvents.Event.ACTIVITY_RESUMED -> {
+                    lastResumeTime = event.timeStamp
+                }
+                UsageEvents.Event.ACTIVITY_PAUSED -> {
+                    if (lastResumeTime != -1L) {
+                        val resumeClamped = maxOf(lastResumeTime, startTime)
+                        val pauseClamped = minOf(event.timeStamp, endTime)
+                        if (pauseClamped > resumeClamped) {
+                            totalTime += (pauseClamped - resumeClamped)
+                        }
+                        lastResumeTime = -1L
+                    }
+                }
+            }
+        }
+
+        // App is still open right now — count up to "now"
+        if (lastResumeTime != -1L) {
+            val resumeClamped = maxOf(lastResumeTime, startTime)
+            if (endTime > resumeClamped) {
+                totalTime += (endTime - resumeClamped)
+            }
+        }
+
+        return totalTime
+    }
+
     private fun checkHourlyAllowanceRules() {
         val hourlyApps = prefs.getHourlyApps()
         if (hourlyApps.isEmpty()) {
@@ -353,56 +350,89 @@ class DetoxTimerService : Service() {
         val windowMs = prefs.getUsageWindowMins() * 60_000L
         val allowanceMins = prefs.getAllowanceMins()
         val blockMap = prefs.getHourlyBlockUntilMap()
+        val cycleStartMap = prefs.getHourlyCycleStartMap()
 
-        Log.d(TAG, "Evaluating Hourly Rules -> Apps: ${hourlyApps.size}")
-
-        // Step 1: Release apps whose fixed reset window has elapsed
         val toUnblock = mutableSetOf<String>()
-        val stillBlocked = mutableSetOf<String>()
+        val newlyExceeded = mutableSetOf<String>()
 
         hourlyApps.forEach { pkg ->
-            val until = blockMap[pkg]
-            when {
-                until == null -> {} 
-                now >= until -> { toUnblock.add(pkg); blockMap.remove(pkg) }
-                else -> stillBlocked.add(pkg)
+            var cycleStart = cycleStartMap[pkg]
+
+            // Deterministic reset: exactly windowMs after THIS app's cycle began,
+            // never "windowMs after we happened to detect the limit."
+            if (cycleStart == null || now - cycleStart >= windowMs) {
+                cycleStart = now
+                cycleStartMap[pkg] = now
+                if (blockMap.remove(pkg) != null) toUnblock.add(pkg)
+            }
+
+            // If still blocked from this same cycle, leave it blocked.
+            val blockedUntil = blockMap[pkg]
+            if (blockedUntil != null && now < blockedUntil) return@forEach
+
+            // Usage counted safely using precise event parsing within window
+            val usageMs = getForegroundTimeMs(pkg, cycleStart, now)
+            val usageMins = usageMs / (1000 * 60)
+
+            Log.d(TAG, "App $pkg usage: ${usageMins}m / limit ${allowanceMins}m (cycle started $cycleStart)")
+
+            if (usageMins >= allowanceMins) {
+                newlyExceeded.add(pkg)
+                // Deterministic expiry: cycle start + full window, not now + window.
+                blockMap[pkg] = cycleStart + windowMs
             }
         }
 
         if (toUnblock.isNotEmpty() && !prefs.isDetoxActive()) {
-            Log.d(TAG, "Reset window elapsed, unsuspending: $toUnblock")
+            Log.d(TAG, "Cycle reset, unsuspending: $toUnblock")
             shizukuEngine.unsuspendPackages(toUnblock)
         }
-
-        // Step 2: Check live usage for apps not currently blocked and NOT just unblocked
-        val toCheck = (hourlyApps - stillBlocked) - toUnblock
-        if (toCheck.isNotEmpty()) {
-            val usageManager = getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
-            val statsMap = usageManager.queryAndAggregateUsageStats(now - windowMs, now)
-
-            val newlyExceeded = mutableSetOf<String>()
-            toCheck.forEach { pkg ->
-                val usageMs = statsMap?.get(pkg)?.totalTimeInForeground ?: 0L
-                val usageMins = usageMs / (1000 * 60)
-
-                Log.d(TAG, "App $pkg usage: ${usageMins}m / limit ${allowanceMins}m")
-
-                if (usageMins >= allowanceMins) {
-                    newlyExceeded.add(pkg)
-                    blockMap[pkg] = now + windowMs 
-                }
-            }
-
-            if (newlyExceeded.isNotEmpty()) {
-                Log.d(TAG, "Limit hit, suspending: $newlyExceeded")
-                shizukuEngine.suspendPackages(newlyExceeded)
-            }
+        if (newlyExceeded.isNotEmpty()) {
+            Log.d(TAG, "Limit hit, suspending: $newlyExceeded")
+            shizukuEngine.suspendPackages(newlyExceeded)
         }
 
         prefs.setHourlyBlockUntilMap(blockMap)
-
-        // Schedule/recalculate exact alarm for the next upcoming unblock
+        prefs.setHourlyCycleStartMap(cycleStartMap)
         scheduleNextUnblockAlarm()
+    }
+
+    private fun scheduleNextUnblockAlarm() {
+        val blockMap = prefs.getHourlyBlockUntilMap()
+        val alarmManager = getSystemService(Context.ALARM_SERVICE) as AlarmManager
+        val intent = Intent(this, DetoxTimerService::class.java).apply {
+            action = ACTION_EVALUATE_RULES
+        }
+        val pendingIntent = PendingIntent.getService(
+            this, REQUEST_CODE_UNBLOCK, intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        if (prefs.getHourlyApps().isEmpty()) {
+            alarmManager.cancel(pendingIntent)
+            return
+        }
+
+        val now = System.currentTimeMillis()
+        // Always keep re-checking every minute so apps under the limit get
+        // caught as they approach it, not just already-blocked ones.
+        val periodicRecheck = now + 60_000L
+        val earliestExpiry = blockMap.values.minOrNull()
+        val targetTime = if (earliestExpiry == null) {
+            periodicRecheck
+        } else {
+            minOf(if (earliestExpiry <= now) now + 1000L else earliestExpiry, periodicRecheck)
+        }
+
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, targetTime, pendingIntent)
+            } else {
+                alarmManager.setExact(AlarmManager.RTC_WAKEUP, targetTime, pendingIntent)
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to schedule exact unblock alarm", e)
+        }
     }
 
     private fun suspendAllPackages() {
