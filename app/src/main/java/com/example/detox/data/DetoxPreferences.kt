@@ -3,6 +3,7 @@ package com.example.detox.data
 import android.content.Context
 import android.content.SharedPreferences
 import org.json.JSONArray
+import org.json.JSONObject
 import java.util.Calendar
 
 class DetoxPreferences(context: Context) {
@@ -20,6 +21,7 @@ class DetoxPreferences(context: Context) {
         private const val KEY_USAGE_WINDOW_MINS = "usage_window_mins"
         private const val KEY_ALLOWANCE_MINS = "allowance_mins"
         private const val KEY_HOURLY_DAYS = "hourly_days"
+        private const val KEY_HOURLY_BLOCK_MAP = "hourly_block_until_map"
 
         // Night Block Keys
         private const val KEY_NIGHT_APPS = "night_apps"
@@ -72,6 +74,27 @@ class DetoxPreferences(context: Context) {
 
     fun getHourlyDays(): Set<Int> = decodeIntSet(prefs.getString(KEY_HOURLY_DAYS, "[1,2,3,4,5,6,7]"))
     fun setHourlyDays(days: Set<Int>) = prefs.edit().putString(KEY_HOURLY_DAYS, encodeIntSet(days)).apply()
+
+    // --- Hourly Block State (per-app "blockedUntil" timestamps) ---
+    // This is what actually drives auto-unlock now, instead of inferring it from
+    // UsageStatsManager alone (which could return empty and silently skip unsuspend).
+    fun getHourlyBlockUntilMap(): MutableMap<String, Long> {
+        val raw = prefs.getString(KEY_HOURLY_BLOCK_MAP, null) ?: return mutableMapOf()
+        return try {
+            val obj = JSONObject(raw)
+            val map = mutableMapOf<String, Long>()
+            obj.keys().forEach { key -> map[key] = obj.getLong(key) }
+            map
+        } catch (e: Exception) {
+            mutableMapOf()
+        }
+    }
+
+    fun setHourlyBlockUntilMap(map: Map<String, Long>) {
+        val obj = JSONObject()
+        map.forEach { (k, v) -> obj.put(k, v) }
+        prefs.edit().putString(KEY_HOURLY_BLOCK_MAP, obj.toString()).apply()
+    }
 
     // --- Night Block Helpers ---
     fun getNightApps(): Set<String> = prefs.getStringSet(KEY_NIGHT_APPS, emptySet()) ?: emptySet()
