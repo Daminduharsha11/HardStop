@@ -8,10 +8,10 @@
 </p>
 
 <p align="center">
-  <img src="assets/2.png" alt="Screenshot 2" width="18%">
-  <img src="assets/3.png" alt="Screenshot 3" width="18%">
-  <img src="assets/4.png" alt="Screenshot 4" width="18%">
-  <img src="assets/5.png" alt="Screenshot 5" width="18%">
+  <img src="assets/2.png" alt="Screenshot 2" width="25%">
+  <img src="assets/3.png" alt="Screenshot 3" width="25%">
+  <img src="assets/4.png" alt="Screenshot 4" width="25%">
+  <img src="assets/5.png" alt="Screenshot 5" width="25%">
 </p>
 
 HardStop is a system-level Android digital wellbeing app that enforces true app suspension. Powered by **[Shizuku](https://shizuku.rikka.app/)**, it disables distracting apps at the OS level based on custom enforcement rules—no easily bypassable overlays.
