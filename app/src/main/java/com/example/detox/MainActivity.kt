@@ -47,6 +47,7 @@ import com.example.detox.engine.ShizukuPackageEngine
 import com.example.detox.ui.screens.HourlyRuleScreen
 import com.example.detox.ui.screens.NightRuleScreen
 import com.example.detox.ui.screens.SettingsScreen
+import androidx.activity.enableEdgeToEdge
 import rikka.shizuku.Shizuku
 
 data class InstalledApp(
@@ -88,6 +89,8 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         preferences = DetoxPreferences(this)
         shizukuEngine = ShizukuPackageEngine(applicationContext)
+
+        enableEdgeToEdge()
 
         // Register Shizuku event listeners
         Shizuku.addBinderReceivedListener(binderReceivedListener)
