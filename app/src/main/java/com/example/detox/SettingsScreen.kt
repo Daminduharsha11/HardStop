@@ -6,8 +6,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Code
-import androidx.compose.material.icons.filled.Palette
+import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -24,7 +23,6 @@ import com.example.detox.data.DetoxPreferences
 import com.example.detox.engine.ShizukuPackageEngine
 import com.example.detox.showToast
 import rikka.shizuku.Shizuku
-import androidx.compose.material.icons.filled.Favorite
 
 enum class ShizukuConnectionStatus {
     RUNNING_AUTHORIZED,
@@ -123,7 +121,6 @@ fun SettingsScreen(
                                     expandedThemeDropdown = false
                                     showToast(context, "Applying theme...")
 
-                                    // Restart activity to apply theme immediately
                                     val intent = Intent(context, MainActivity::class.java).apply {
                                         addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
                                     }
@@ -198,87 +195,56 @@ fun SettingsScreen(
 }
 
 @Composable
-fun DeveloperCard() {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(
-                imageVector = Icons.Default.Favorite,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier
-                    .size(40.dp)
-                    .padding(end = 12.dp)
-            )
-            Column {
-                Text(
-                    text = "Damindu Harsha",
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Bold
-                )
-                Text(
-                    text = "Made with ❤️ by Damindu Harsha",
-                    fontSize = 12.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        }
-    }
-}
-
-@Composable
 fun ShizukuStateCard(shizukuEngine: ShizukuPackageEngine) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
+
     var connectionStatus by remember { mutableStateOf(ShizukuConnectionStatus.NOT_RUNNING) }
-    var detectedManager by remember { mutableStateOf("None") }
     var runningUid by remember { mutableIntStateOf(-1) }
+    var detectedManager by remember { mutableStateOf("Not Installed") }
 
     fun refreshState() {
-    val pm = context.packageManager
-    
-    // Check if any Shizuku provider is installed on the system
-    val hasStandard = try { pm.resolveContentProvider("moe.shizuku.privileged.api", 0) != null } catch (e: Exception) { false }
-    val hasPlus = try { pm.resolveContentProvider("af.shizuku.plus.api", 0) != null } catch (e: Exception) { false }
+        val pm = context.packageManager
 
-    detectedManager = when {
-        hasStandard || hasPlus -> "Shizuku"
-        else -> "Not Installed"
-    }
+        val isBinderAlive = try {
+            Shizuku.pingBinder()
+        } catch (e: Exception) {
+            false
+        }
 
-    val isBinderAlive = try {
-        Shizuku.pingBinder()
-    } catch (e: Exception) {
-        false
-    }
+        val hasStandard = try {
+            pm.resolveContentProvider("moe.shizuku.privileged.api", 0) != null
+        } catch (e: Exception) { false }
 
-    if (!isBinderAlive) {
-        connectionStatus = ShizukuConnectionStatus.NOT_RUNNING
-        runningUid = -1
-        return
-    }
+        val hasPlus = try {
+            pm.resolveContentProvider("af.shizuku.plus.api", 0) != null
+        } catch (e: Exception) { false }
 
-    val hasPermission = try {
-        Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED
-    } catch (e: Exception) {
-        false
-    }
+        detectedManager = when {
+            hasStandard || hasPlus || isBinderAlive -> "Shizuku"
+            else -> "Not Installed"
+        }
 
-    if (hasPermission) {
-        connectionStatus = ShizukuConnectionStatus.RUNNING_AUTHORIZED
-        runningUid = try { Shizuku.getUid() } catch (e: Exception) { -1 }
-    } else {
-        connectionStatus = ShizukuConnectionStatus.RUNNING_NOT_AUTHORIZED
-        runningUid = -1
+        if (!isBinderAlive) {
+            connectionStatus = ShizukuConnectionStatus.NOT_RUNNING
+            runningUid = -1
+            return
+        }
+
+        val hasPermission = try {
+            Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED
+        } catch (e: Exception) {
+            false
+        }
+
+        if (hasPermission) {
+            connectionStatus = ShizukuConnectionStatus.RUNNING_AUTHORIZED
+            runningUid = try { Shizuku.getUid() } catch (e: Exception) { -1 }
+        } else {
+            connectionStatus = ShizukuConnectionStatus.RUNNING_NOT_AUTHORIZED
+            runningUid = -1
+        }
     }
-}
 
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
@@ -387,6 +353,42 @@ fun ShizukuStateCard(shizukuEngine: ShizukuPackageEngine) {
                 ) {
                     Text(text = "Refresh", color = contentColor)
                 }
+            }
+        }
+    }
+}
+
+@Composable
+fun DeveloperCard() {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = Icons.Default.Favorite,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier
+                    .size(40.dp)
+                    .padding(end = 12.dp)
+            )
+            Column {
+                Text(
+                    text = "Damindu Harsha",
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = "Made with ❤️ by Damindu Harsha",
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
         }
     }
