@@ -23,6 +23,7 @@ class DetoxPreferences(context: Context) {
         private const val KEY_HOURLY_DAYS = "hourly_days"
         private const val KEY_HOURLY_BLOCK_MAP = "hourly_block_until_map"
         private const val KEY_HOURLY_CYCLE_START_MAP = "hourly_cycle_start_map"
+        private const val KEY_HOURLY_MONITORING_ENABLED = "hourly_monitoring_enabled"
 
         // Night Block Keys
         private const val KEY_NIGHT_APPS = "night_apps"
@@ -31,6 +32,7 @@ class DetoxPreferences(context: Context) {
         private const val KEY_NIGHT_END_HOUR = "night_end_hour"
         private const val KEY_NIGHT_END_MIN = "night_end_min"
         private const val KEY_NIGHT_DAYS = "night_days"
+        private const val KEY_NIGHT_MONITORING_ENABLED = "night_monitoring_enabled"
 
         // Settings Keys
         private const val KEY_START_ON_BOOT = "start_on_boot"
@@ -94,6 +96,9 @@ fun setHourlyCycleStartMap(map: Map<String, Long>) {
     fun getHourlyDays(): Set<Int> = decodeIntSet(prefs.getString(KEY_HOURLY_DAYS, "[1,2,3,4,5,6,7]"))
     fun setHourlyDays(days: Set<Int>) = prefs.edit().putString(KEY_HOURLY_DAYS, encodeIntSet(days)).apply()
 
+    fun isHourlyMonitoringActive(): Boolean = prefs.getBoolean(KEY_HOURLY_MONITORING_ENABLED, false)
+    fun setHourlyMonitoringActive(enabled: Boolean) = prefs.edit().putBoolean(KEY_HOURLY_MONITORING_ENABLED, enabled).apply()
+
     // --- Hourly Block State (per-app "blockedUntil" timestamps) ---
     // This is what actually drives auto-unlock now, instead of inferring it from
     // UsageStatsManager alone (which could return empty and silently skip unsuspend).
@@ -118,6 +123,9 @@ fun setHourlyCycleStartMap(map: Map<String, Long>) {
     // --- Night Block Helpers ---
     fun getNightApps(): Set<String> = prefs.getStringSet(KEY_NIGHT_APPS, emptySet()) ?: emptySet()
     fun setNightApps(apps: Set<String>) = prefs.edit().putStringSet(KEY_NIGHT_APPS, apps).apply()
+
+    fun isNightMonitoringActive(): Boolean = prefs.getBoolean(KEY_NIGHT_MONITORING_ENABLED, false)
+    fun setNightMonitoringActive(enabled: Boolean) = prefs.edit().putBoolean(KEY_NIGHT_MONITORING_ENABLED, enabled).apply()
 
     fun getNightStart(): Pair<Int, Int> = Pair(
         prefs.getInt(KEY_NIGHT_START_HOUR, 22),

@@ -31,6 +31,10 @@ class DetoxTimerService : Service() {
         const val ACTION_START_MONITORING = "ACTION_START_MONITORING"
         const val EXTRA_PACKAGES = "EXTRA_PACKAGES"
         const val EXTRA_DURATION_MS = "EXTRA_DURATION_MS"
+        const val ACTION_STOP_MONITORING = "ACTION_STOP_MONITORING"
+        const val ACTION_STOP_NIGHT_MONITORING = "ACTION_STOP_NIGHT_MONITORING"
+        const val ACTION_START_HOURLY_MONITORING = "ACTION_START_HOURLY_MONITORING"
+        const val ACTION_START_NIGHT_MONITORING = "ACTION_START_NIGHT_MONITORING"
 
         private const val REQUEST_CODE_NIGHT = 1001
         private const val REQUEST_CODE_UNBLOCK = 1002
@@ -64,6 +68,28 @@ class DetoxTimerService : Service() {
             }
         }
 
+        fun startNightMonitoring(context: Context) {
+    val intent = Intent(context, DetoxTimerService::class.java).apply {
+        action = ACTION_START_NIGHT_MONITORING
+    }
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+        context.startForegroundService(intent)
+    } else {
+        context.startService(intent)
+    }
+}
+
+fun startHourlyMonitoring(context: Context) {
+    val intent = Intent(context, DetoxTimerService::class.java).apply {
+        action = ACTION_START_HOURLY_MONITORING
+    }
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+        context.startForegroundService(intent)
+    } else {
+        context.startService(intent)
+    }
+}
+
         fun startMonitoring(context: Context) {
             val intent = Intent(context, DetoxTimerService::class.java).apply {
                 action = ACTION_START_MONITORING
@@ -74,6 +100,28 @@ class DetoxTimerService : Service() {
                 context.startService(intent)
             }
         }
+
+        fun stopMonitoring(context: Context) {
+            val intent = Intent(context, DetoxTimerService::class.java).apply {
+                action = ACTION_STOP_MONITORING
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                context.startForegroundService(intent)
+            } else {
+                context.startService(intent)
+            }
+        }
+
+        fun stopNightMonitoring(context: Context) {
+    val intent = Intent(context, DetoxTimerService::class.java).apply {
+        action = ACTION_STOP_NIGHT_MONITORING
+    }
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+        context.startForegroundService(intent)
+    } else {
+        context.startService(intent)
+    }
+}
     }
 
     override fun onCreate() {
@@ -89,43 +137,54 @@ class DetoxTimerService : Service() {
         val notification = buildNotification("Aegis Detox Active")
         startForegroundServiceInternal(notification)
 
-        when (action) {
-            ACTION_START -> {
-                val durationMs = intent.getLongExtra(EXTRA_DURATION_MS, 0L)
-                val pkgsList = intent.getStringArrayListExtra(EXTRA_PACKAGES)
+when (action) {
+    ACTION_START_NIGHT_MONITORING -> {
+        Log.d(TAG, "Night block monitoring initialized.")
+        prefs.setNightMonitoringActive(true)
+        checkNightAndHourlyRules()
+    }
 
-                lockedPackages = if (!pkgsList.isNullOrEmpty()) {
-                    pkgsList.toSet()
-                } else {
-                    prefs.getLockedPackages()
-                }
+    ACTION_START_HOURLY_MONITORING -> {
+        Log.d(TAG, "Hourly monitoring initialized.")
+        prefs.setHourlyMonitoringActive(true)
+        checkNightAndHourlyRules()
+    }
 
-                val remainingMs = if (durationMs > 0) durationMs else (prefs.getDetoxEndTime() - System.currentTimeMillis())
-
-                if (remainingMs > 0) {
-                    suspendAllPackages()
-                    startCountdown(remainingMs)
-                } else {
-                    unlockAllPackages()
-                    stopSelf()
-                }
-            }
-            ACTION_START_MONITORING -> {
-                Log.d(TAG, "Exact alarm rule monitoring initialized.")
-                checkNightAndHourlyRules()
-            }
-            ACTION_EVALUATE_RULES -> {
-                checkNightAndHourlyRules()
-            }
-            else -> {
-                if (prefs.isDetoxActive()) {
-                    lockedPackages = prefs.getLockedPackages()
-                    startCountdown(prefs.getDetoxEndTime() - System.currentTimeMillis())
-                } else {
-                    checkNightAndHourlyRules()
-                }
-            }
+    ACTION_STOP_MONITORING -> {
+        Log.d(TAG, "Hourly monitoring stopped by user.")
+        prefs.setHourlyMonitoringActive(false)
+        val hourlyApps = prefs.getHourlyApps()
+        if (hourlyApps.isNotEmpty()) {
+            shizukuEngine.unsuspendPackages(hourlyApps)
         }
+        prefs.setHourlyBlockUntilMap(emptyMap())
+        prefs.setHourlyCycleStartMap(emptyMap())
+        cancelNextUnblockAlarm()
+    }
+
+    ACTION_STOP_NIGHT_MONITORING -> {
+        Log.d(TAG, "Night block monitoring stopped by user.")
+        prefs.setNightMonitoringActive(false)
+        val nightApps = prefs.getNightApps()
+        if (nightApps.isNotEmpty() && !prefs.isDetoxActive()) {
+            shizukuEngine.unsuspendPackages(nightApps)
+        }
+        cancelNextNightAlarm()
+    }
+
+    ACTION_EVALUATE_RULES -> {
+        checkNightAndHourlyRules()
+    }
+
+    else -> {
+        if (prefs.isDetoxActive()) {
+            lockedPackages = prefs.getLockedPackages()
+            startCountdown(prefs.getDetoxEndTime() - System.currentTimeMillis())
+        } else {
+            checkNightAndHourlyRules()
+        }
+    }
+}
 
         return START_STICKY
     }

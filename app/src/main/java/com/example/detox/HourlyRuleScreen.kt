@@ -3,6 +3,7 @@ package com.example.detox.ui.screens
 import android.widget.Toast
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.outlined.HourglassEmpty
 import androidx.compose.material.icons.outlined.Timer
@@ -33,17 +34,33 @@ fun HourlyRuleScreen(preferences: DetoxPreferences) {
     var showCustomAllowanceDialog by remember { mutableStateOf(false) }
     var showAppPicker by remember { mutableStateOf(false) }
 
+    var isActive by remember { mutableStateOf(preferences.isHourlyMonitoringActive()) }
+
     Box(modifier = Modifier.fillMaxSize()) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(horizontal = 20.dp)
-                .padding(bottom = 80.dp) // Leave space for the floating button
+                .padding(bottom = 80.dp)
         ) {
             Spacer(modifier = Modifier.height(16.dp))
 
             Text(
-                text = "Usage Window & Limit",
+                text = "Usage Limit",
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = "Apps get cut off after your allowed time, then wait for the next reset.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            Spacer(modifier = Modifier.height(20.dp))
+
+            Text(
+                text = "Limit Settings",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.primary
@@ -58,7 +75,6 @@ fun HourlyRuleScreen(preferences: DetoxPreferences) {
                 )
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
-                    // Window Period Configuration
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(
                             imageVector = Icons.Outlined.Timer,
@@ -68,7 +84,7 @@ fun HourlyRuleScreen(preferences: DetoxPreferences) {
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "Reset Window Period",
+                            text = "Resets Every",
                             style = MaterialTheme.typography.labelLarge,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -105,7 +121,6 @@ fun HourlyRuleScreen(preferences: DetoxPreferences) {
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
                     Spacer(modifier = Modifier.height(16.dp))
 
-                    // Allowed Usage Configuration
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(
                             imageVector = Icons.Outlined.HourglassEmpty,
@@ -115,7 +130,7 @@ fun HourlyRuleScreen(preferences: DetoxPreferences) {
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "Allowed Usage Per Period",
+                            text = "Time Allowed",
                             style = MaterialTheme.typography.labelLarge,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -170,8 +185,8 @@ fun HourlyRuleScreen(preferences: DetoxPreferences) {
             Spacer(modifier = Modifier.height(24.dp))
 
             RuleAppListSection(
-                title = "Hourly Limited Apps",
-                emptyText = "No apps assigned to hourly rule",
+                title = "Limited Apps",
+                emptyText = "No apps assigned to this limit",
                 selectedApps = selectedApps,
                 onManageClick = { showAppPicker = true },
                 onRemoveApp = { pkg ->
@@ -183,16 +198,35 @@ fun HourlyRuleScreen(preferences: DetoxPreferences) {
             )
         }
 
-// Floating Action Button at the bottom above nav bar
         ExtendedFloatingActionButton(
             onClick = {
-                DetoxTimerService.startMonitoring(context)
-                Toast.makeText(context, "Background tracking started...", Toast.LENGTH_SHORT).show()
+                if (isActive) {
+                    DetoxTimerService.stopMonitoring(context)
+                    preferences.setHourlyMonitoringActive(false)
+                    isActive = false
+                    Toast.makeText(context, "Hourly limit stopped", Toast.LENGTH_SHORT).show()
+                } else {
+                    DetoxTimerService.startHourlyMonitoring(context)
+                    preferences.setHourlyMonitoringActive(true)
+                    isActive = true
+                    Toast.makeText(context, "Hourly limit started", Toast.LENGTH_SHORT).show()
+                }
             },
-            icon = { Icon(Icons.Default.PlayArrow, contentDescription = null) },
-            text = { Text("Start") },
-            containerColor = MaterialTheme.colorScheme.primaryContainer,
-            contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+            icon = {
+                Icon(
+                    if (isActive) Icons.Default.Bolt else Icons.Default.PlayArrow,
+                    contentDescription = null
+                )
+            },
+            text = { Text(if (isActive) "Active" else "Start") },
+            containerColor = if (isActive)
+                MaterialTheme.colorScheme.primary
+            else
+                MaterialTheme.colorScheme.primaryContainer,
+            contentColor = if (isActive)
+                MaterialTheme.colorScheme.onPrimary
+            else
+                MaterialTheme.colorScheme.onPrimaryContainer,
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .padding(bottom = 16.dp)
@@ -201,7 +235,7 @@ fun HourlyRuleScreen(preferences: DetoxPreferences) {
 
     if (showCustomWindowDialog) {
         InputDialog(
-            title = "Set Reset Window (Minutes)",
+            title = "Set Reset Interval (Minutes)",
             initialValue = windowMins.toString(),
             onDismiss = { showCustomWindowDialog = false },
             onConfirm = { inputMins ->
@@ -209,6 +243,7 @@ fun HourlyRuleScreen(preferences: DetoxPreferences) {
                     if (it > 0) {
                         windowMins = it
                         preferences.setUsageWindowMins(it)
+                        Toast.makeText(context, "Resets every $it min", Toast.LENGTH_SHORT).show()
                     }
                 }
                 showCustomWindowDialog = false
@@ -218,7 +253,7 @@ fun HourlyRuleScreen(preferences: DetoxPreferences) {
 
     if (showCustomAllowanceDialog) {
         InputDialog(
-            title = "Set Allowed Usage (Minutes)",
+            title = "Set Time Allowed (Minutes)",
             initialValue = allowanceMins.toString(),
             onDismiss = { showCustomAllowanceDialog = false },
             onConfirm = { inputMins ->
@@ -226,6 +261,7 @@ fun HourlyRuleScreen(preferences: DetoxPreferences) {
                     if (it > 0) {
                         allowanceMins = it
                         preferences.setAllowanceMins(it)
+                        Toast.makeText(context, "Time allowed: $it min", Toast.LENGTH_SHORT).show()
                     }
                 }
                 showCustomAllowanceDialog = false

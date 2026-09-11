@@ -4,6 +4,7 @@ import android.widget.Toast
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowForward
+import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.outlined.Nightlight
 import androidx.compose.material3.*
@@ -25,33 +26,48 @@ import java.util.Locale
 fun NightRuleScreen(preferences: DetoxPreferences) {
     val context = LocalContext.current
 
-    var activeDays by remember { mutableStateOf<Set<Int>>(preferences.getNightDays()) }
-    var selectedApps by remember { mutableStateOf<Set<String>>(preferences.getNightApps()) }
+    var activeDays by remember { mutableStateOf(preferences.getNightDays()) }
+    var selectedApps by remember { mutableStateOf(preferences.getNightApps()) }
     var showAppPicker by remember { mutableStateOf(false) }
 
-    val initialStart = preferences.getNightStart()
+    val initialStart = remember { preferences.getNightStart() }
     var startHour by remember { mutableIntStateOf(initialStart.first) }
     var startMin by remember { mutableIntStateOf(initialStart.second) }
 
-    val initialEnd = preferences.getNightEnd()
+    val initialEnd = remember { preferences.getNightEnd() }
     var endHour by remember { mutableIntStateOf(initialEnd.first) }
     var endMin by remember { mutableIntStateOf(initialEnd.second) }
 
     var showStartPicker by remember { mutableStateOf(false) }
     var showEndPicker by remember { mutableStateOf(false) }
 
+    var isActive by remember { mutableStateOf(preferences.isNightMonitoringActive()) }
+
     Box(modifier = Modifier.fillMaxSize()) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(horizontal = 20.dp)
-                .padding(bottom = 80.dp) // Leave space for the floating button
+                .padding(bottom = 80.dp)
         ) {
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Header Section
             Text(
-                text = "Scheduled Night Lock",
+                text = "Scheduled Block",
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = "Pick a time range and apps stay locked until it ends.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            Spacer(modifier = Modifier.height(20.dp))
+
+            Text(
+                text = "Block Window",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.primary
@@ -59,7 +75,6 @@ fun NightRuleScreen(preferences: DetoxPreferences) {
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            // Schedule Configuration Card
             ElevatedCard(
                 modifier = Modifier.fillMaxWidth(),
                 colors = CardDefaults.elevatedCardColors(
@@ -76,7 +91,7 @@ fun NightRuleScreen(preferences: DetoxPreferences) {
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "Lock Window",
+                            text = "Block Times",
                             style = MaterialTheme.typography.labelLarge,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -153,7 +168,6 @@ fun NightRuleScreen(preferences: DetoxPreferences) {
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            // Days Selector Section
             Text(
                 text = "Active Days",
                 style = MaterialTheme.typography.titleMedium,
@@ -171,10 +185,9 @@ fun NightRuleScreen(preferences: DetoxPreferences) {
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            // Shared RuleAppListSection component for consistent spacing & styling
             RuleAppListSection(
-                title = "Night Blocked Apps",
-                emptyText = "No apps assigned to night block",
+                title = "Blocked Apps",
+                emptyText = "No apps assigned to this block",
                 selectedApps = selectedApps,
                 onManageClick = { showAppPicker = true },
                 onRemoveApp = { pkg ->
@@ -186,16 +199,35 @@ fun NightRuleScreen(preferences: DetoxPreferences) {
             )
         }
 
-// Floating Action Button at the bottom above nav bar
         ExtendedFloatingActionButton(
             onClick = {
-                DetoxTimerService.startMonitoring(context)
-                Toast.makeText(context, "Background tracking started...", Toast.LENGTH_SHORT).show()
+                if (isActive) {
+                    DetoxTimerService.stopNightMonitoring(context)
+                    preferences.setNightMonitoringActive(false)
+                    isActive = false
+                    Toast.makeText(context, "Scheduled block stopped", Toast.LENGTH_SHORT).show()
+                } else {
+                    DetoxTimerService.startNightMonitoring(context)
+                    preferences.setNightMonitoringActive(true)
+                    isActive = true
+                    Toast.makeText(context, "Scheduled block started", Toast.LENGTH_SHORT).show()
+                }
             },
-            icon = { Icon(Icons.Default.PlayArrow, contentDescription = null) },
-            text = { Text("Start") },
-            containerColor = MaterialTheme.colorScheme.primaryContainer,
-            contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+            icon = {
+                Icon(
+                    if (isActive) Icons.Default.Bolt else Icons.Default.PlayArrow,
+                    contentDescription = null
+                )
+            },
+            text = { Text(if (isActive) "Active" else "Start") },
+            containerColor = if (isActive)
+                MaterialTheme.colorScheme.primary
+            else
+                MaterialTheme.colorScheme.primaryContainer,
+            contentColor = if (isActive)
+                MaterialTheme.colorScheme.onPrimary
+            else
+                MaterialTheme.colorScheme.onPrimaryContainer,
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .padding(bottom = 16.dp)
@@ -215,6 +247,11 @@ fun NightRuleScreen(preferences: DetoxPreferences) {
                     startHour = timePickerState.hour
                     startMin = timePickerState.minute
                     preferences.setNightStart(timePickerState.hour, timePickerState.minute)
+                    Toast.makeText(
+                        context,
+                        String.format(Locale.getDefault(), "Start time set to %02d:%02d", timePickerState.hour, timePickerState.minute),
+                        Toast.LENGTH_SHORT
+                    ).show()
                     showStartPicker = false
                 }) { Text("Set") }
             },
@@ -238,6 +275,11 @@ fun NightRuleScreen(preferences: DetoxPreferences) {
                     endHour = timePickerState.hour
                     endMin = timePickerState.minute
                     preferences.setNightEnd(timePickerState.hour, timePickerState.minute)
+                    Toast.makeText(
+                        context,
+                        String.format(Locale.getDefault(), "End time set to %02d:%02d", timePickerState.hour, timePickerState.minute),
+                        Toast.LENGTH_SHORT
+                    ).show()
                     showEndPicker = false
                 }) { Text("Set") }
             },

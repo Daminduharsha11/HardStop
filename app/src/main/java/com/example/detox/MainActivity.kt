@@ -128,13 +128,13 @@ class MainActivity : ComponentActivity() {
                                 selected = selectedTab == 0,
                                 onClick = { selectedTab = 0 },
                                 icon = { Icon(Icons.Default.DateRange, contentDescription = "Hourly Limit") },
-                                label = { Text("Hourly Limit") }
+                                label = { Text("Usage Limit") }
                             )
                             NavigationBarItem(
                                 selected = selectedTab == 1,
                                 onClick = { selectedTab = 1 },
                                 icon = { Icon(Icons.Default.Lock, contentDescription = "Night Block") },
-                                label = { Text("Night Block") }
+                                label = { Text("Scheduled Block") }
                             )
                             NavigationBarItem(
                                 selected = selectedTab == 2,
