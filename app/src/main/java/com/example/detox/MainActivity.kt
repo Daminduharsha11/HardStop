@@ -109,16 +109,32 @@ class MainActivity : ComponentActivity() {
             }
 
             val colorScheme = when {
-                isDark && themeMode == 3 -> darkColorScheme(
-                    surface = Color.Black,
-                    background = Color.Black
-                )
-                Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
-                    if (isDark) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
-                }
-                isDark -> darkColorScheme()
-                else -> lightColorScheme()
-            }
+    isDark && themeMode == 3 -> {
+        // Pure AMOLED Dark Scheme without M3 purple tinting
+        darkColorScheme(
+            primary = Color(0xFFD0BCFF),
+            onPrimary = Color(0xFF381E72),
+            primaryContainer = Color(0xFF212121),
+            onPrimaryContainer = Color(0xFFEADDFF),
+            background = Color.Black,
+            onBackground = Color.White,
+            surface = Color.Black,
+            onSurface = Color.White,
+            surfaceVariant = Color(0xFF121212), // Subtle dark contrast for cards
+            onSurfaceVariant = Color(0xFFC4C4C4),
+            surfaceContainer = Color.Black,
+            surfaceContainerHigh = Color(0xFF121212),
+            surfaceTint = Color.Transparent, // Disables elevation tint
+            outline = Color(0xFF2C2C2C),
+            outlineVariant = Color(0xFF1F1F1F)
+        )
+    }
+    Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
+        if (isDark) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
+    }
+    isDark -> darkColorScheme()
+    else -> lightColorScheme()
+}
 
             MaterialTheme(colorScheme = colorScheme) {
                 Scaffold(

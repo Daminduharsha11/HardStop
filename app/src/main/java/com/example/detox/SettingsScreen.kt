@@ -1,9 +1,13 @@
 package com.example.detox.ui.screens
 
+import android.content.Intent
 import android.content.pm.PackageManager
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Code
+import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -20,6 +24,7 @@ import com.example.detox.data.DetoxPreferences
 import com.example.detox.engine.ShizukuPackageEngine
 import com.example.detox.showToast
 import rikka.shizuku.Shizuku
+import androidx.compose.material.icons.filled.Favorite
 
 enum class ShizukuConnectionStatus {
     RUNNING_AUTHORIZED,
@@ -27,6 +32,7 @@ enum class ShizukuConnectionStatus {
     NOT_RUNNING
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
     preferences: DetoxPreferences,
@@ -36,6 +42,9 @@ fun SettingsScreen(
     val context = LocalContext.current
     var themeMode by remember { mutableIntStateOf(preferences.getThemeMode()) }
     var startOnBoot by remember { mutableStateOf(preferences.getStartOnBoot()) }
+    var expandedThemeDropdown by remember { mutableStateOf(false) }
+
+    val themeOptions = listOf("System Default", "Light", "Dark", "AMOLED Dark")
 
     Column(
         modifier = Modifier
@@ -86,27 +95,42 @@ fun SettingsScreen(
                 )
                 Spacer(modifier = Modifier.height(8.dp))
 
-                val themeOptions = listOf("System Default", "Light", "Dark", "AMOLED Dark")
-                themeOptions.forEachIndexed { index, title ->
-                    Row(
+                ExposedDropdownMenuBox(
+                    expanded = expandedThemeDropdown,
+                    onExpandedChange = { expandedThemeDropdown = !expandedThemeDropdown }
+                ) {
+                    OutlinedTextField(
+                        value = themeOptions.getOrElse(themeMode) { "System Default" },
+                        onValueChange = {},
+                        readOnly = true,
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedThemeDropdown) },
                         modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                            .menuAnchor()
+                            .fillMaxWidth(),
+                        colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors()
+                    )
+
+                    ExposedDropdownMenu(
+                        expanded = expandedThemeDropdown,
+                        onDismissRequest = { expandedThemeDropdown = false }
                     ) {
-                        RadioButton(
-                            selected = themeMode == index,
-                            onClick = {
-                                themeMode = index
-                                preferences.setThemeMode(index)
-                                showToast(context, "Theme updated")
-                            }
-                        )
-                        Text(
-                            text = title,
-                            fontSize = 14.sp,
-                            modifier = Modifier.padding(start = 8.dp)
-                        )
+                        themeOptions.forEachIndexed { index, title ->
+                            DropdownMenuItem(
+                                text = { Text(title) },
+                                onClick = {
+                                    themeMode = index
+                                    preferences.setThemeMode(index)
+                                    expandedThemeDropdown = false
+                                    showToast(context, "Applying theme...")
+
+                                    // Restart activity to apply theme immediately
+                                    val intent = Intent(context, MainActivity::class.java).apply {
+                                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+                                    }
+                                    context.startActivity(intent)
+                                }
+                            )
+                        }
                     }
                 }
             }
@@ -122,7 +146,9 @@ fun SettingsScreen(
         )
 
         Card(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 24.dp),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
         ) {
             Row(
@@ -149,7 +175,58 @@ fun SettingsScreen(
                     onCheckedChange = { enabled ->
                         startOnBoot = enabled
                         preferences.setStartOnBoot(enabled)
+                        showToast(
+                            context,
+                            if (enabled) "Start on boot enabled" else "Start on boot disabled"
+                        )
                     }
+                )
+            }
+        }
+
+        // Developer Information
+        Text(
+            text = "About",
+            fontSize = 14.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.padding(bottom = 8.dp)
+        )
+
+        DeveloperCard()
+    }
+}
+
+@Composable
+fun DeveloperCard() {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = Icons.Default.Favorite,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier
+                    .size(40.dp)
+                    .padding(end = 12.dp)
+            )
+            Column {
+                Text(
+                    text = "Damindu Harsha",
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = "Made with ❤️ by Damindu Harsha",
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         }
@@ -165,42 +242,43 @@ fun ShizukuStateCard(shizukuEngine: ShizukuPackageEngine) {
     var runningUid by remember { mutableIntStateOf(-1) }
 
     fun refreshState() {
-        val pm = context.packageManager
-        val hasStandard = try { pm.resolveContentProvider("moe.shizuku.privileged.api", 0) != null } catch (e: Exception) { false }
-        val hasPlus = try { pm.resolveContentProvider("af.shizuku.plus.api", 0) != null } catch (e: Exception) { false }
+    val pm = context.packageManager
+    
+    // Check if any Shizuku provider is installed on the system
+    val hasStandard = try { pm.resolveContentProvider("moe.shizuku.privileged.api", 0) != null } catch (e: Exception) { false }
+    val hasPlus = try { pm.resolveContentProvider("af.shizuku.plus.api", 0) != null } catch (e: Exception) { false }
 
-        detectedManager = when {
-            hasPlus -> "Shizuku+ (af.shizuku.plus.api)"
-            hasStandard -> "Shizuku (moe.shizuku.privileged.api)"
-            else -> "Not Installed"
-        }
-
-        val isBinderAlive = try {
-            Shizuku.pingBinder()
-        } catch (e: Exception) {
-            false
-        }
-
-        if (!isBinderAlive) {
-            connectionStatus = ShizukuConnectionStatus.NOT_RUNNING
-            runningUid = -1
-            return
-        }
-
-        val hasPermission = try {
-            Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED
-        } catch (e: Exception) {
-            false
-        }
-
-        if (hasPermission) {
-            connectionStatus = ShizukuConnectionStatus.RUNNING_AUTHORIZED
-            runningUid = try { Shizuku.getUid() } catch (e: Exception) { -1 }
-        } else {
-            connectionStatus = ShizukuConnectionStatus.RUNNING_NOT_AUTHORIZED
-            runningUid = -1
-        }
+    detectedManager = when {
+        hasStandard || hasPlus -> "Shizuku"
+        else -> "Not Installed"
     }
+
+    val isBinderAlive = try {
+        Shizuku.pingBinder()
+    } catch (e: Exception) {
+        false
+    }
+
+    if (!isBinderAlive) {
+        connectionStatus = ShizukuConnectionStatus.NOT_RUNNING
+        runningUid = -1
+        return
+    }
+
+    val hasPermission = try {
+        Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED
+    } catch (e: Exception) {
+        false
+    }
+
+    if (hasPermission) {
+        connectionStatus = ShizukuConnectionStatus.RUNNING_AUTHORIZED
+        runningUid = try { Shizuku.getUid() } catch (e: Exception) { -1 }
+    } else {
+        connectionStatus = ShizukuConnectionStatus.RUNNING_NOT_AUTHORIZED
+        runningUid = -1
+    }
+}
 
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
