@@ -1,53 +1,70 @@
 # HardStop
 
-
-<p align="left">
-  <img src="assets/Screenshot.png" alt="HardStop banner" width="300">
+<p align="center">
+  <img src="https://img.shields.io/badge/version-v1.0.0-blue?style=for-the-badge" alt="Version">
+  <img src="https://img.shields.io/badge/Android-8.0%2B-brightgreen?style=for-the-badge&logo=android" alt="Android">
+  <img src="https://img.shields.io/badge/license-MIT-orange?style=for-the-badge" alt="License">
+  <img src="https://img.shields.io/badge/status-stable-success?style=for-the-badge" alt="Status">
 </p>
 
-A digital wellbeing app for Android that enforces real app suspension, not just reminders. HardStop uses [Shizuku](https://github.com/RikkaApps/Shizuku) to actually suspend distracting apps at the system level, based on rules you define.
+<p align="center">
+  <img src="assets/2.png" alt="Screenshot 2" width="18%">
+  <img src="assets/3.png" alt="Screenshot 3" width="18%">
+  <img src="assets/4.png" alt="Screenshot 4" width="18%">
+  <img src="assets/5.png" alt="Screenshot 5" width="18%">
+</p>
 
-## Features
+HardStop is a system-level Android digital wellbeing app that enforces true app suspension. Powered by **[Shizuku](https://shizuku.rikka.app/)**, it disables distracting apps at the OS level based on custom enforcement rules—no easily bypassable overlays.
 
-- **Pace Rules** — Allow an app a fixed amount of usage (e.g. 30 minutes) within a rolling cycle (e.g. every 3 hours). Once the allowance is used up, the app is suspended until the cycle resets.
-- **Freeze Rules** — Automatically suspend selected apps during a configured time window (e.g. 11 PM–7 AM).
-- **Real app suspension, not just blocking overlays** — Uses Shizuku to call system-level `setPackagesSuspended`, so blocked apps can't be launched at all, rather than relying on an accessibility overlay that can be dismissed.
-- **Start on boot** — Rule monitoring and active suspensions are restored automatically after a device restart.
-- **Per-app cycle tracking** — Each app tracks its own precise cycle start time, so partial usage (e.g. 20 of 30 minutes) is preserved accurately until that app's cycle actually ends — no drifting or premature resets.
+---
 
-## How it works
+## ✨ Key Features
 
-1. You define one or more **Pace Rules** (allowance + window period) and/or a **Freeze Rule** (block window period) and select which installed apps they apply to.
-2. `DetoxTimerService` evaluates these rules using Android's `UsageStatsManager` events, computing exact foreground time per app within its current cycle.
-3. When an app exceeds its allowance, HardStop calls into `ShizukuPackageEngine` to suspend the package via Shizuku's elevated permissions.
-4. An `AlarmManager` alarm is scheduled for the next meaningful event (cycle expiry, block expiry) so the app can react precisely without constant polling.
-5. Suspended apps are automatically released the moment their cycle resets.
+* **⏱️ Usage Limit Rules:** Limit app usage within rolling windows (e.g., 30 mins every 3 hours). Apps remain locked until the cycle resets.
+* **🌙 Scheduled Block Rules:** Schedule complete block windows for fixed timeframes (e.g., 11 PM–7 AM).
+* **🔒 True OS Suspension:** Uses Shizuku to execute `setPackagesSuspended`. Suspended apps cannot be launched from any launcher.
+* **🎯 Per-App Precision:** Tracks exact individual app usage cycles without timer drift or premature resets.
+* **🔄 Boot Recovery:** Automatically re-evaluates rules and restores active suspensions after a device restart.
 
-## Requirements
+---
 
-- Android 8.0 (API 26) or higher
-- [Shizuku](https://shizuku.rikka.app/) installed and running (via ADB pairing or a rooted device)
-- Usage Access permission (`PACKAGE_USAGE_STATS`) granted to HardStop
+## ⚙️ How It Works
 
-### Recommended Shizuku version
+1. **Tracking:** `DetoxTimerService` computes foreground usage using `UsageStatsManager`.
+2. **Enforcement:** Exceeding an allowance triggers `ShizukuPackageEngine` to suspend the package.
+3. **Scheduling:** `AlarmManager` schedules exact cycle reset events to eliminate constant background polling.
 
-For newer Android versions (beyond Android 16 QPR1), the original Shizuku repository may occasionally crash. It's recommended to use an active fork for better compatibility, stability:
+---
 
-- **Recommended fork:** [thedjchi/Shizuku](https://github.com/thedjchi/Shizuku)
+## 📋 Requirements
 
-The original Shizuku or other community forks will also work, but this fork handles newer Android API changes more smoothly.
+* **OS:** Android 8.0 (API 26) or higher
+* **Permissions:** Usage Access (`PACKAGE_USAGE_STATS`)
+* **Engine:** [Shizuku](https://shizuku.rikka.app/) running via Wireless ADB or Root
+  * *Recommended:* [thedjchi/Shizuku](https://github.com/thedjchi/Shizuku) fork for enhanced stability on newer Android versions.
 
-## Setup
+---
 
-1. Install and start [Shizuku](https://github.com/thedjchi/Shizuku) (wireless or ADB debugging works fine on unrooted devices).
-2. Install HardStop, grant it **Usage Access** and Shizuku permission when prompted.
-3. Configure your **Hourly Limit** and/or **Night Block** rules and pick the apps to restrict.
-4. Set HardStop's battery usage to **Unrestricted** (Settings → Apps → HardStop → Battery) so cycle resets and unblocks stay reliable in the background. On Samsung/Xiaomi/OnePlus, check [dontkillmyapp.com](https://dontkillmyapp.com/) too — their battery managers can still kill background apps regardless.
+## 🚀 Quick Setup
 
-## Contributing
+1. Start **Shizuku** via Wireless ADB or Root.
+2. Open **HardStop** and grant **Usage Access** and **Shizuku** permissions when prompted.
+3. Define your **Usage Limit** or **Scheduled Block** rules and select target applications.
+4. Set HardStop battery optimization to **Unrestricted** (*Settings → Apps → HardStop → Battery*) to ensure background alarms execute on time (refer to [dontkillmyapp.com](https://dontkillmyapp.com/)).
 
-This is my first Android app, feedback, corrections, issues and PRs welcome. Please include logcat output (`adb logcat --pid=$(pidof com.example.detox)`) when reporting rule-timing bugs — cycle behavior is timestamp-sensitive and hard to diagnose without it.
+---
 
-## License
+## 🤝 Contributing
 
-Distributed under the MIT License. See [LICENSE](LICENSE) for more information.
+HardStop is my first Android project! Contributions, feedback, and bug reports are welcome! Please include logcat output when reporting timing issues:
+
+
+```bash
+adb logcat --pid=$(pidof com.example.detox)
+```
+
+
+## 📄 License
+
+
+Distributed under the **MIT License**. See [LICENSE](https://www.google.com/search?q=LICENSE) for details. 
