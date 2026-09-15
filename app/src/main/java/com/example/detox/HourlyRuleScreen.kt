@@ -185,7 +185,7 @@ fun HourlyRuleScreen(preferences: DetoxPreferences) {
                             text = if (isLocked)
                                 "Ends at ${formatTimestamp(lockedEndTime)} ($lockedCycles cycles)"
                             else
-                                "Disables stopping running blocks during active cycles",
+                                "Locks active rules until set cycles end",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -476,32 +476,47 @@ fun HourlyRuleScreen(preferences: DetoxPreferences) {
             text = {
                 Column(modifier = Modifier.fillMaxWidth()) {
                     Text(
-                        text = "Locked State prevents stopping any running blocks. If stopped while locked, blocks will safely disable only when the cycle completes.",
+                        text = "Locks active rules until selected cycles finish. Stopped blocks safely end at cycle reset.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
 
-                    Spacer(modifier = Modifier.height(16.dp))
+                    Spacer(modifier = Modifier.height(14.dp))
 
                     Text(
-                        text = "How many cycles should locked state stay active?",
+                        text = "Select Lock Duration",
                         fontWeight = FontWeight.SemiBold,
                         style = MaterialTheme.typography.titleSmall
                     )
 
                     Spacer(modifier = Modifier.height(10.dp))
 
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        listOf(1, 2, 3, 4).forEach { count ->
-                            FilterChip(
-                                selected = selectedCyclesCount == count,
-                                onClick = { selectedCyclesCount = count },
-                                label = { Text("$count ${if (count == 1) "Cycle" else "Cycles"}") },
-                                modifier = Modifier.weight(1f)
-                            )
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            listOf(1, 2).forEach { count ->
+                                FilterChip(
+                                    selected = selectedCyclesCount == count,
+                                    onClick = { selectedCyclesCount = count },
+                                    label = { Text("$count ${if (count == 1) "Cycle" else "Cycles"}") },
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
+                        }
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            listOf(3, 4).forEach { count ->
+                                FilterChip(
+                                    selected = selectedCyclesCount == count,
+                                    onClick = { selectedCyclesCount = count },
+                                    label = { Text("$count ${if (count == 1) "Cycle" else "Cycles"}") },
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
                         }
                     }
 
