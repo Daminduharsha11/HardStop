@@ -3,8 +3,12 @@
 <p align="center">
   <img src="assets/logo.png" alt="Aegis Detox logo" width="120">
 </p>
-
-<h3 align="center">Real app suspension, not reminders</h3>
+<p align="center">
+  <img src="https://img.shields.io/badge/version-v2.3.0-blue?style=for-the-badge" alt="Version">
+  <img src="https://img.shields.io/badge/Android-8.0%2B-brightgreen?style=for-the-badge&logo=android" alt="Android">
+  <img src="https://img.shields.io/badge/license-MIT-orange?style=for-the-badge" alt="License">
+  <img src="https://img.shields.io/badge/status-stable-success?style=for-the-badge" alt="Status">
+</p>
 
 A digital wellbeing app for Android that enforces real app suspension - not reminders, not overlays. HardStop uses [Shizuku](https://github.com/RikkaApps/Shizuku) to suspend distracting apps at the system level, based on rules you set and can optionally lock yourself into.
 
@@ -55,9 +59,10 @@ On Android 16 QPR1+, the original Shizuku app can occasionally crash. This fork 
 ## Setup
 
 1. Install and start [Shizuku](https://github.com/thedjchi/Shizuku).
-2. Install HardStop, grant Usage Access and authorize Shizuku when prompted.
-3. Set up your rules and assign apps.
-4. Set battery usage to **Unrestricted** (Settings → Apps → Aegis Detox → Battery) so cycle resets aren't killed in the background. On Samsung/Xiaomi/OnePlus, also check [dontkillmyapp.com](https://dontkillmyapp.com/).
+2. Download HardStop from [Release page](https://github.com/Daminduharsha11/HardStop/releases/latest)
+3. Install HardStop, grant Usage Access and authorize Shizuku when prompted.
+4. Set up your rules and assign apps.
+5. Set battery usage to **Unrestricted** (Settings → Apps → Aegis Detox → Battery) so cycle resets aren't killed in the background. On Samsung/Xiaomi/OnePlus, also check [dontkillmyapp.com](https://dontkillmyapp.com/).
 
 ## Contributing
 
