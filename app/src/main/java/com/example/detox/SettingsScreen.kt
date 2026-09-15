@@ -527,7 +527,7 @@ fun DeveloperCard() {
                     color = MaterialTheme.colorScheme.onSurface
                 )
                 Text(
-                    text = "Developer • Aegis Detox v1.0.0",
+                    text = "HardStop(Aegis) v2.4.0",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )

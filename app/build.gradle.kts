@@ -4,11 +4,11 @@ plugins {
 }
 
 android {
-    namespace = "com.example.detox"
+    namespace = "com.aegis.hardstop"
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "com.example.detox"
+        applicationId = "com.aegis.hardstop"
         minSdk = 26
         targetSdk = 34
         versionCode = 1
