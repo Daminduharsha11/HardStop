@@ -1,4 +1,4 @@
-package com.example.detox.util
+package com.aegis.hardstop.util
 
 import android.app.NotificationChannel
 import android.app.NotificationManager

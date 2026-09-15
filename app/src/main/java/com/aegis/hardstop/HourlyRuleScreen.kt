@@ -1,4 +1,4 @@
-package com.example.detox.ui.screens
+package com.aegis.hardstop.ui.screens
 
 import android.widget.Toast
 import androidx.compose.animation.*
@@ -26,12 +26,12 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.detox.data.DetoxPreferences
-import com.example.detox.service.DetoxTimerService
-import com.example.detox.ui.AppPickerBottomSheet
-import com.example.detox.ui.DayOfWeekSelector
-import com.example.detox.ui.InputDialog
-import com.example.detox.ui.RuleAppListSection
+import com.aegis.hardstop.data.DetoxPreferences
+import com.aegis.hardstop.service.DetoxTimerService
+import com.aegis.hardstop.ui.AppPickerBottomSheet
+import com.aegis.hardstop.ui.DayOfWeekSelector
+import com.aegis.hardstop.ui.InputDialog
+import com.aegis.hardstop.ui.RuleAppListSection
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale

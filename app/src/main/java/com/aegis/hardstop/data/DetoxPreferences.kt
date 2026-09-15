@@ -1,4 +1,4 @@
-package com.example.detox.data
+package com.aegis.hardstop.data
 
 import android.content.Context
 import android.content.SharedPreferences

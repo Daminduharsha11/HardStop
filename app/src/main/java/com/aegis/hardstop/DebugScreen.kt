@@ -1,4 +1,4 @@
-package com.example.detox
+package com.aegis.hardstop
 
 import android.app.usage.UsageStatsManager
 import android.content.Context
@@ -9,8 +9,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import com.example.detox.engine.ShizukuPackageEngine
-import com.example.detox.util.NotificationHelper
+import com.aegis.hardstop.engine.ShizukuPackageEngine
+import com.aegis.hardstop.util.NotificationHelper
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch

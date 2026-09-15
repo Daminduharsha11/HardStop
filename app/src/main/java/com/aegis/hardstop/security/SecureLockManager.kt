@@ -1,4 +1,4 @@
-package com.example.detox.security
+package com.aegis.hardstop.security
 
 import android.content.Context
 import android.os.SystemClock

@@ -1,4 +1,4 @@
-package com.example.detox.service
+package com.aegis.hardstop.service
 
 import android.app.*
 import android.app.usage.UsageStatsManager
@@ -8,8 +8,8 @@ import android.content.pm.ServiceInfo
 import android.os.*
 import android.util.Log
 import androidx.core.app.NotificationCompat
-import com.example.detox.data.DetoxPreferences
-import com.example.detox.engine.ShizukuPackageEngine
+import com.aegis.hardstop.data.DetoxPreferences
+import com.aegis.hardstop.engine.ShizukuPackageEngine
 import java.util.Calendar
 import android.app.usage.UsageEvents
 

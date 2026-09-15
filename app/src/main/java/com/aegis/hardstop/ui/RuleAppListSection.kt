@@ -1,4 +1,4 @@
-package com.example.detox.ui
+package com.aegis.hardstop.ui
 
 import android.content.pm.PackageManager
 import androidx.compose.foundation.clickable

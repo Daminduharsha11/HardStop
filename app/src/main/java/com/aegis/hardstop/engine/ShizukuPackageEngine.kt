@@ -1,4 +1,4 @@
-package com.example.detox.engine
+package com.aegis.hardstop.engine
 
 import android.content.Context
 import android.content.pm.PackageManager

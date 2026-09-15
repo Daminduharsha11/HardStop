@@ -1,10 +1,10 @@
-package com.example.detox.receiver
+package com.aegis.hardstop.receiver
 
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import com.example.detox.data.DetoxPreferences
-import com.example.detox.service.DetoxTimerService
+import com.aegis.hardstop.data.DetoxPreferences
+import com.aegis.hardstop.service.DetoxTimerService
 import java.util.ArrayList
 
 class BootReceiver : BroadcastReceiver() {

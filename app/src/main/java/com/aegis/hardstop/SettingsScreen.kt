@@ -1,4 +1,4 @@
-package com.example.detox.ui.screens
+package com.aegis.hardstop.ui.screens
 
 import android.content.Context
 import android.content.Intent
@@ -38,10 +38,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
-import com.example.detox.MainActivity
-import com.example.detox.data.DetoxPreferences
-import com.example.detox.engine.ShizukuPackageEngine
-import com.example.detox.showToast
+import com.aegis.hardstop.MainActivity
+import com.aegis.hardstop.data.DetoxPreferences
+import com.aegis.hardstop.engine.ShizukuPackageEngine
+import com.aegis.hardstop.showToast
 import rikka.shizuku.Shizuku
 
 enum class ShizukuConnectionStatus {

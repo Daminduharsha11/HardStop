@@ -1,4 +1,4 @@
-package com.example.detox.ui.theme
+package com.aegis.hardstop.ui.theme
 
 import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme

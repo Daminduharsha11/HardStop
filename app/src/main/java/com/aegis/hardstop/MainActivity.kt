@@ -1,4 +1,4 @@
-package com.example.detox
+package com.aegis.hardstop
 
 import android.app.AppOpsManager
 import android.content.Context
@@ -42,12 +42,12 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import com.example.detox.data.DetoxPreferences
-import com.example.detox.engine.ShizukuPackageEngine
-import com.example.detox.ui.screens.HourlyRuleScreen
-import com.example.detox.ui.screens.NightRuleScreen
-import com.example.detox.ui.screens.SettingsScreen
-import com.example.detox.ui.theme.DetoxTheme
+import com.aegis.hardstop.data.DetoxPreferences
+import com.aegis.hardstop.engine.ShizukuPackageEngine
+import com.aegis.hardstop.ui.screens.HourlyRuleScreen
+import com.aegis.hardstop.ui.screens.NightRuleScreen
+import com.aegis.hardstop.ui.screens.SettingsScreen
+import com.aegis.hardstop.ui.theme.DetoxTheme
 import androidx.activity.enableEdgeToEdge
 import rikka.shizuku.Shizuku
 

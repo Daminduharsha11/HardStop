@@ -1,4 +1,4 @@
-package com.example.detox.model
+package com.aegis.hardstop.model
 
 import android.graphics.drawable.Drawable
 
