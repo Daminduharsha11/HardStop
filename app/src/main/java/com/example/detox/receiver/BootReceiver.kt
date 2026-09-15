@@ -3,49 +3,28 @@ package com.example.detox.receiver
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import android.os.Build
 import com.example.detox.data.DetoxPreferences
-import com.example.detox.engine.ShizukuPackageEngine
 import com.example.detox.service.DetoxTimerService
+import java.util.ArrayList
 
 class BootReceiver : BroadcastReceiver() {
-
     override fun onReceive(context: Context, intent: Intent) {
-        if (intent.action == Intent.ACTION_BOOT_COMPLETED || 
-            intent.action == "android.intent.action.QUICKBOOT_POWERON") {
-            
-            DetoxTimerService.startMonitoring(context) 
-            
-            val prefs = DetoxPreferences(context)
-
-            if (prefs.isDetoxActive()) {
-                val lockedApps = prefs.getLockedPackages()
-                val remainingMs = prefs.getDetoxEndTime() - System.currentTimeMillis()
-
-                if (remainingMs > 0 && lockedApps.isNotEmpty()) {
-                    // Instantiate engine with Context
-                    val shizukuEngine = ShizukuPackageEngine(context.applicationContext)
-
-                    // Re-suspend packages via Shizuku
-                    if (shizukuEngine.isShizukuAvailable()) {
-                        shizukuEngine.suspendPackages(lockedApps)
+        val action = intent.action ?: return
+        if (action == Intent.ACTION_BOOT_COMPLETED || action == "android.intent.action.QUICKBOOT_POWERON") {
+            val preferences = DetoxPreferences(context)
+            if (preferences.getStartOnBoot()) {
+                // Resume ongoing active timer lock if not expired
+                if (preferences.isDetoxActive()) {
+                    val remainingMs = preferences.getDetoxEndTime() - System.currentTimeMillis()
+                    if (remainingMs > 0) {
+                        val packages = ArrayList<String>(preferences.getLockedPackages())
+                        DetoxTimerService.startService(context, packages, remainingMs)
                     }
+                }
 
-                    // Restart timer service with explicit ArrayList<String> type
-                    val pkgList = ArrayList<String>(lockedApps)
-                    val serviceIntent = Intent(context, DetoxTimerService::class.java).apply {
-                        action = DetoxTimerService.ACTION_START
-                        putStringArrayListExtra(DetoxTimerService.EXTRA_PACKAGES, pkgList)
-                        putExtra(DetoxTimerService.EXTRA_DURATION_MS, remainingMs)
-                    }
-
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                        context.startForegroundService(serviceIntent)
-                    } else {
-                        context.startService(serviceIntent)
-                    }
-                } else {
-                    prefs.clearDetoxSession()
+                // Resume monitoring for hourly or night rules if active
+                if (preferences.isHourlyMonitoringActive() || preferences.isNightMonitoringActive()) {
+                    DetoxTimerService.startMonitoring(context)
                 }
             }
         }

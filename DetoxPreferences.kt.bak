@@ -25,12 +25,6 @@ class DetoxPreferences(context: Context) {
         private const val KEY_HOURLY_CYCLE_START_MAP = "hourly_cycle_start_map"
         private const val KEY_HOURLY_MONITORING_ENABLED = "hourly_monitoring_enabled"
 
-        // Hourly Locked State Keys
-        private const val KEY_HOURLY_LOCKED_STATE = "hourly_locked_state"
-        private const val KEY_HOURLY_LOCKED_UNTIL_TIME = "hourly_locked_until_time"
-        private const val KEY_HOURLY_LOCKED_CYCLES = "hourly_locked_cycles"
-        private const val KEY_HOURLY_PENDING_STOP_NEXT_CYCLE = "hourly_pending_stop_next_cycle"
-
         // Night Block Keys
         private const val KEY_NIGHT_APPS = "night_apps"
         private const val KEY_NIGHT_START_HOUR = "night_start_hour"
@@ -40,31 +34,27 @@ class DetoxPreferences(context: Context) {
         private const val KEY_NIGHT_DAYS = "night_days"
         private const val KEY_NIGHT_MONITORING_ENABLED = "night_monitoring_enabled"
 
-        // Night Locked State Keys
-        private const val KEY_NIGHT_LOCKED_STATE = "night_locked_state"
-        private const val KEY_NIGHT_PENDING_STOP_NEXT_CYCLE = "night_pending_stop_next_cycle"
-
         // Settings Keys
         private const val KEY_START_ON_BOOT = "start_on_boot"
         private const val KEY_THEME_MODE = "theme_mode"
     }
 
     fun getHourlyCycleStartMap(): MutableMap<String, Long> {
-        val raw = prefs.getString(KEY_HOURLY_CYCLE_START_MAP, null) ?: return mutableMapOf()
-        return try {
-            val obj = JSONObject(raw)
-            val map = mutableMapOf<String, Long>()
-            obj.keys().forEach { key -> map[key] = obj.getLong(key) }
-            map
-        } catch (e: Exception) {
-            mutableMapOf()
-        }
+    val raw = prefs.getString(KEY_HOURLY_CYCLE_START_MAP, null) ?: return mutableMapOf()
+    return try {
+        val obj = JSONObject(raw)
+        val map = mutableMapOf<String, Long>()
+        obj.keys().forEach { key -> map[key] = obj.getLong(key) }
+        map
+    } catch (e: Exception) {
+        mutableMapOf()
+    }
     }
 
-    fun setHourlyCycleStartMap(map: Map<String, Long>) {
-        val obj = JSONObject()
-        map.forEach { (k, v) -> obj.put(k, v) }
-        prefs.edit().putString(KEY_HOURLY_CYCLE_START_MAP, obj.toString()).apply()
+fun setHourlyCycleStartMap(map: Map<String, Long>) {
+    val obj = JSONObject()
+    map.forEach { (k, v) -> obj.put(k, v) }
+    prefs.edit().putString(KEY_HOURLY_CYCLE_START_MAP, obj.toString()).apply()
     }
 
     // --- Active Lock / Session Helpers ---
@@ -109,48 +99,9 @@ class DetoxPreferences(context: Context) {
     fun isHourlyMonitoringActive(): Boolean = prefs.getBoolean(KEY_HOURLY_MONITORING_ENABLED, false)
     fun setHourlyMonitoringActive(enabled: Boolean) = prefs.edit().putBoolean(KEY_HOURLY_MONITORING_ENABLED, enabled).apply()
 
-    // --- Hourly Locked State (Tamper-Proof & Multi-Cycle Lock) ---
-    fun isHourlyLockedState(): Boolean {
-        val enabled = prefs.getBoolean(KEY_HOURLY_LOCKED_STATE, false)
-        if (!enabled) return false
-        val untilTime = getHourlyLockedUntilTime()
-        if (untilTime > 0 && System.currentTimeMillis() >= untilTime) {
-            // Expired naturally
-            clearHourlyLockedState()
-            return false
-        }
-        return true
-    }
-
-    fun getHourlyLockedUntilTime(): Long = prefs.getLong(KEY_HOURLY_LOCKED_UNTIL_TIME, 0L)
-    fun getHourlyLockedCycles(): Int = prefs.getInt(KEY_HOURLY_LOCKED_CYCLES, 1)
-
-    fun enableHourlyLockedState(cycles: Int, untilTimestamp: Long) {
-        prefs.edit()
-            .putBoolean(KEY_HOURLY_LOCKED_STATE, true)
-            .putInt(KEY_HOURLY_LOCKED_CYCLES, cycles)
-            .putLong(KEY_HOURLY_LOCKED_UNTIL_TIME, untilTimestamp)
-            .putBoolean(KEY_HOURLY_PENDING_STOP_NEXT_CYCLE, false)
-            .apply()
-    }
-
-    fun clearHourlyLockedState() {
-        prefs.edit()
-            .putBoolean(KEY_HOURLY_LOCKED_STATE, false)
-            .remove(KEY_HOURLY_LOCKED_UNTIL_TIME)
-            .remove(KEY_HOURLY_LOCKED_CYCLES)
-            .putBoolean(KEY_HOURLY_PENDING_STOP_NEXT_CYCLE, false)
-            .apply()
-    }
-
-    fun isHourlyPendingStopNextCycle(): Boolean =
-        prefs.getBoolean(KEY_HOURLY_PENDING_STOP_NEXT_CYCLE, false)
-
-    fun setHourlyPendingStopNextCycle(pending: Boolean) {
-        prefs.edit().putBoolean(KEY_HOURLY_PENDING_STOP_NEXT_CYCLE, pending).apply()
-    }
-
     // --- Hourly Block State (per-app "blockedUntil" timestamps) ---
+    // This is what actually drives auto-unlock now, instead of inferring it from
+    // UsageStatsManager alone (which could return empty and silently skip unsuspend).
     fun getHourlyBlockUntilMap(): MutableMap<String, Long> {
         val raw = prefs.getString(KEY_HOURLY_BLOCK_MAP, null) ?: return mutableMapOf()
         return try {
@@ -175,23 +126,6 @@ class DetoxPreferences(context: Context) {
 
     fun isNightMonitoringActive(): Boolean = prefs.getBoolean(KEY_NIGHT_MONITORING_ENABLED, false)
     fun setNightMonitoringActive(enabled: Boolean) = prefs.edit().putBoolean(KEY_NIGHT_MONITORING_ENABLED, enabled).apply()
-
-    // --- Night Locked State Helpers ---
-    fun isNightLockedState(): Boolean = prefs.getBoolean(KEY_NIGHT_LOCKED_STATE, false)
-
-    fun setNightLockedState(enabled: Boolean) {
-        prefs.edit().putBoolean(KEY_NIGHT_LOCKED_STATE, enabled).apply()
-        if (!enabled) {
-            setNightPendingStopNextCycle(false)
-        }
-    }
-
-    fun isNightPendingStopNextCycle(): Boolean =
-        prefs.getBoolean(KEY_NIGHT_PENDING_STOP_NEXT_CYCLE, false)
-
-    fun setNightPendingStopNextCycle(pending: Boolean) {
-        prefs.edit().putBoolean(KEY_NIGHT_PENDING_STOP_NEXT_CYCLE, pending).apply()
-    }
 
     fun getNightStart(): Pair<Int, Int> = Pair(
         prefs.getInt(KEY_NIGHT_START_HOUR, 22),
@@ -229,8 +163,11 @@ class DetoxPreferences(context: Context) {
     fun setThemeMode(mode: Int) = prefs.edit().putInt(KEY_THEME_MODE, mode).apply()
 
     // --- Combined Lock & Active Window Evaluation ---
+
+    // Combines both Hourly and Night app lists during night hours
     fun getAllNightLockedApps(): Set<String> = getNightApps() + getHourlyApps()
 
+    // Checks if current system time falls within the configured Night Block window
     fun isNightBlockActiveNow(): Boolean {
         val calendar = Calendar.getInstance()
         val currentDay = calendar.get(Calendar.DAY_OF_WEEK)
@@ -246,6 +183,7 @@ class DetoxPreferences(context: Context) {
         return if (startTotalMin < endTotalMin) {
             currentMinOfDay in startTotalMin until endTotalMin
         } else {
+            // Handles overnight spans (e.g., 22:00 to 06:00)
             currentMinOfDay >= startTotalMin || currentMinOfDay < endTotalMin
         }
     }

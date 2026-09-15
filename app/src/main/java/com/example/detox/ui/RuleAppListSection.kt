@@ -74,8 +74,8 @@ fun RuleAppListSection(
         if (selectedApps.isEmpty()) {
             Box(
                 modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth(),
+                    .fillMaxWidth()
+                    .padding(vertical = 24.dp),
                 contentAlignment = Alignment.Center
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -94,49 +94,42 @@ fun RuleAppListSection(
                 }
             }
         } else {
-            Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth()
-                    .verticalScroll(rememberScrollState())
+            FlowRow(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(bubbleGap),
+                verticalArrangement = Arrangement.spacedBy(bubbleGap)
             ) {
-                FlowRow(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(bubbleGap),
-                    verticalArrangement = Arrangement.spacedBy(bubbleGap)
-                ) {
-                    selectedApps.forEach { pkg ->
-                        val appLabel = remember(pkg) { getAppName(pkg) }
+                selectedApps.forEach { pkg ->
+                    val appLabel = remember(pkg) { getAppName(pkg) }
 
-                        InputChip(
-                            selected = true,
-                            onClick = { },
-                            modifier = Modifier.height(32.dp),
-                            label = {
-                                Text(
-                                    text = appLabel,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    fontWeight = FontWeight.Medium
+                    InputChip(
+                        selected = true,
+                        onClick = { },
+                        modifier = Modifier.height(32.dp),
+                        label = {
+                            Text(
+                                text = appLabel,
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Medium
+                            )
+                        },
+                        trailingIcon = {
+                            Box(
+                                modifier = Modifier
+                                    .size(18.dp)
+                                    .clip(MaterialTheme.shapes.small)
+                                    .clickable { onRemoveApp(pkg) },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Outlined.Close,
+                                    contentDescription = "Remove $appLabel",
+                                    modifier = Modifier.size(14.dp),
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
-                            },
-                            trailingIcon = {
-                                Box(
-                                    modifier = Modifier
-                                        .size(18.dp)
-                                        .clip(MaterialTheme.shapes.small)
-                                        .clickable { onRemoveApp(pkg) },
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Outlined.Close,
-                                        contentDescription = "Remove $appLabel",
-                                        modifier = Modifier.size(14.dp),
-                                        tint = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
                             }
-                        )
-                    }
+                        }
+                    )
                 }
             }
         }

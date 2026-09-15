@@ -69,36 +69,29 @@ class DetoxTimerService : Service() {
         }
 
         fun startNightMonitoring(context: Context) {
-    val intent = Intent(context, DetoxTimerService::class.java).apply {
-        action = ACTION_START_NIGHT_MONITORING
-    }
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-        context.startForegroundService(intent)
-    } else {
-        context.startService(intent)
-    }
-}
-
-fun startHourlyMonitoring(context: Context) {
-    val intent = Intent(context, DetoxTimerService::class.java).apply {
-        action = ACTION_START_HOURLY_MONITORING
-    }
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-        context.startForegroundService(intent)
-    } else {
-        context.startService(intent)
-    }
-}
-
-        fun startMonitoring(context: Context) {
             val intent = Intent(context, DetoxTimerService::class.java).apply {
-                action = ACTION_START_MONITORING
+                action = ACTION_START_NIGHT_MONITORING
             }
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 context.startForegroundService(intent)
             } else {
                 context.startService(intent)
             }
+        }
+
+        fun startHourlyMonitoring(context: Context) {
+            val intent = Intent(context, DetoxTimerService::class.java).apply {
+                action = ACTION_START_HOURLY_MONITORING
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                context.startForegroundService(intent)
+            } else {
+                context.startService(intent)
+            }
+        }
+
+        fun startMonitoring(context: Context) {
+            evaluateRules(context)
         }
 
         fun stopMonitoring(context: Context) {
@@ -113,21 +106,32 @@ fun startHourlyMonitoring(context: Context) {
         }
 
         fun stopNightMonitoring(context: Context) {
-    val intent = Intent(context, DetoxTimerService::class.java).apply {
-        action = ACTION_STOP_NIGHT_MONITORING
-    }
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-        context.startForegroundService(intent)
-    } else {
-        context.startService(intent)
-    }
-}
+            val intent = Intent(context, DetoxTimerService::class.java).apply {
+                action = ACTION_STOP_NIGHT_MONITORING
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                context.startForegroundService(intent)
+            } else {
+                context.startService(intent)
+            }
+        }
     }
 
     override fun onCreate() {
         super.onCreate()
         prefs = DetoxPreferences(this)
         shizukuEngine = ShizukuPackageEngine(applicationContext)
+
+        // Shizuku Crash & Restart Recovery Hook
+        shizukuEngine.onBinderStateChangeListener = { isAlive ->
+            if (isAlive) {
+                Log.i(TAG, "Shizuku reconnected in background service! Re-enforcing rules.")
+                checkNightAndHourlyRules()
+            } else {
+                Log.w(TAG, "Shizuku binder died in background service. Waiting for recovery.")
+            }
+        }
+
         createNotificationChannel()
     }
 
@@ -137,54 +141,69 @@ fun startHourlyMonitoring(context: Context) {
         val notification = buildNotification("Aegis Detox Active")
         startForegroundServiceInternal(notification)
 
-when (action) {
-    ACTION_START_NIGHT_MONITORING -> {
-        Log.d(TAG, "Night block monitoring initialized.")
-        prefs.setNightMonitoringActive(true)
-        checkNightAndHourlyRules()
-    }
+        when (action) {
+            ACTION_START_NIGHT_MONITORING -> {
+                Log.d(TAG, "Night block monitoring initialized.")
+                prefs.setNightMonitoringActive(true)
+                checkNightAndHourlyRules()
+            }
 
-    ACTION_START_HOURLY_MONITORING -> {
-        Log.d(TAG, "Hourly monitoring initialized.")
-        prefs.setHourlyMonitoringActive(true)
-        checkNightAndHourlyRules()
-    }
+            ACTION_START_HOURLY_MONITORING -> {
+                Log.d(TAG, "Hourly monitoring initialized.")
+                prefs.setHourlyMonitoringActive(true)
+                checkNightAndHourlyRules()
+            }
 
-    ACTION_STOP_MONITORING -> {
-        Log.d(TAG, "Hourly monitoring stopped by user.")
-        prefs.setHourlyMonitoringActive(false)
-        val hourlyApps = prefs.getHourlyApps()
-        if (hourlyApps.isNotEmpty()) {
-            shizukuEngine.unsuspendPackages(hourlyApps)
+            ACTION_STOP_MONITORING -> {
+                Log.d(TAG, "Hourly monitoring stop requested.")
+                // If locked state is active, enforce next-cycle deferral
+                if (prefs.isHourlyLockedState()) {
+                    Log.i(TAG, "Locked state active! Marking pending stop for next cycle.")
+                    prefs.setHourlyPendingStopNextCycle(true)
+                    updateNotification("Aegis Detox: Stop requested (will end at next cycle)")
+                } else {
+                    prefs.setHourlyMonitoringActive(false)
+                    prefs.clearHourlyLockedState()
+                    val hourlyApps = prefs.getHourlyApps()
+                    if (hourlyApps.isNotEmpty()) {
+                        shizukuEngine.unsuspendPackages(hourlyApps)
+                    }
+                    prefs.setHourlyBlockUntilMap(emptyMap())
+                    prefs.setHourlyCycleStartMap(emptyMap())
+                    cancelNextUnblockAlarm()
+                }
+            }
+
+            ACTION_STOP_NIGHT_MONITORING -> {
+                Log.d(TAG, "Night block monitoring stop requested.")
+                if (prefs.isNightLockedState() && prefs.isNightBlockActiveNow()) {
+                    Log.i(TAG, "Scheduled locked state active! Marking pending stop for next window end.")
+                    prefs.setNightPendingStopNextCycle(true)
+                    updateNotification("Aegis Detox: Stop requested (will end when block finishes)")
+                } else {
+                    prefs.setNightMonitoringActive(false)
+                    prefs.setNightLockedState(false)
+                    val nightApps = prefs.getNightApps()
+                    if (nightApps.isNotEmpty() && !prefs.isDetoxActive()) {
+                        shizukuEngine.unsuspendPackages(nightApps)
+                    }
+                    cancelNextNightAlarm()
+                }
+            }
+
+            ACTION_EVALUATE_RULES -> {
+                checkNightAndHourlyRules()
+            }
+
+            else -> {
+                if (prefs.isDetoxActive()) {
+                    lockedPackages = prefs.getLockedPackages()
+                    startCountdown(prefs.getDetoxEndTime() - System.currentTimeMillis())
+                } else {
+                    checkNightAndHourlyRules()
+                }
+            }
         }
-        prefs.setHourlyBlockUntilMap(emptyMap())
-        prefs.setHourlyCycleStartMap(emptyMap())
-        cancelNextUnblockAlarm()
-    }
-
-    ACTION_STOP_NIGHT_MONITORING -> {
-        Log.d(TAG, "Night block monitoring stopped by user.")
-        prefs.setNightMonitoringActive(false)
-        val nightApps = prefs.getNightApps()
-        if (nightApps.isNotEmpty() && !prefs.isDetoxActive()) {
-            shizukuEngine.unsuspendPackages(nightApps)
-        }
-        cancelNextNightAlarm()
-    }
-
-    ACTION_EVALUATE_RULES -> {
-        checkNightAndHourlyRules()
-    }
-
-    else -> {
-        if (prefs.isDetoxActive()) {
-            lockedPackages = prefs.getLockedPackages()
-            startCountdown(prefs.getDetoxEndTime() - System.currentTimeMillis())
-        } else {
-            checkNightAndHourlyRules()
-        }
-    }
-}
 
         return START_STICKY
     }
@@ -253,7 +272,7 @@ when (action) {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        if (nightApps.isEmpty()) {
+        if (nightApps.isEmpty() || !prefs.isNightMonitoringActive()) {
             alarmManager.cancel(pendingIntent)
             return
         }
@@ -334,8 +353,12 @@ when (action) {
 
     private fun checkNightAndHourlyRules() {
         try {
-            checkNightBlockRules()
-            checkHourlyAllowanceRules()
+            if (prefs.isNightMonitoringActive()) {
+                checkNightBlockRules()
+            }
+            if (prefs.isHourlyMonitoringActive()) {
+                checkHourlyAllowanceRules()
+            }
         } catch (e: Exception) {
             Log.e(TAG, "Exception encountered while evaluating rules", e)
         }
@@ -350,17 +373,27 @@ when (action) {
         if (nightApps.isNotEmpty()) {
             if (nightActive) {
                 shizukuEngine.suspendPackages(nightApps)
-            } else if (!prefs.isDetoxActive()) {
-                shizukuEngine.unsuspendPackages(nightApps)
+            } else {
+                // Window has ended! Check if user requested a pending stop
+                if (prefs.isNightPendingStopNextCycle()) {
+                    Log.i(TAG, "Night block ended and pending stop was requested. Turning off scheduled monitoring.")
+                    prefs.setNightMonitoringActive(false)
+                    prefs.setNightPendingStopNextCycle(false)
+                    prefs.setNightLockedState(false)
+                }
+
+                if (!prefs.isDetoxActive()) {
+                    shizukuEngine.unsuspendPackages(nightApps)
+                }
             }
         }
 
-        // Schedule the next exact transition boundary for night mode
+        // Schedule next transition boundary
         scheduleNextNightAlarm()
     }
 
     private fun getForegroundTimeMs(pkg: String, startTime: Long, endTime: Long): Long {
-        val usageManager = getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
+        val usageManager = getSystemService(Context.USAGE_STATS_SERVICE) as? UsageStatsManager ?: return 0L
         val events = usageManager.queryEvents(startTime, endTime)
         var totalTime = 0L
         var lastResumeTime = -1L
@@ -387,7 +420,7 @@ when (action) {
             }
         }
 
-        // App is still open right now — count up to "now"
+        // App is still open right now — count up to "endTime"
         if (lastResumeTime != -1L) {
             val resumeClamped = maxOf(lastResumeTime, startTime)
             if (endTime > resumeClamped) {
@@ -400,7 +433,7 @@ when (action) {
 
     private fun checkHourlyAllowanceRules() {
         val hourlyApps = prefs.getHourlyApps()
-        if (hourlyApps.isEmpty()) {
+        if (hourlyApps.isEmpty() || !prefs.isHourlyMonitoringActive()) {
             cancelNextUnblockAlarm()
             return
         }
@@ -413,21 +446,28 @@ when (action) {
 
         val toUnblock = mutableSetOf<String>()
         val newlyExceeded = mutableSetOf<String>()
+        val currentlyBlocked = mutableSetOf<String>()
+        var cycleResetOccurred = false
 
         hourlyApps.forEach { pkg ->
             var cycleStart = cycleStartMap[pkg]
 
-            // Deterministic reset: exactly windowMs after THIS app's cycle began,
-            // never "windowMs after we happened to detect the limit."
+            // Deterministic reset: exactly windowMs after THIS app's cycle began
             if (cycleStart == null || now - cycleStart >= windowMs) {
+                cycleResetOccurred = true
                 cycleStart = now
                 cycleStartMap[pkg] = now
-                if (blockMap.remove(pkg) != null) toUnblock.add(pkg)
+                if (blockMap.remove(pkg) != null) {
+                    toUnblock.add(pkg)
+                }
             }
 
-            // If still blocked from this same cycle, leave it blocked.
+            // Check if app is in active blocked state for this cycle
             val blockedUntil = blockMap[pkg]
-            if (blockedUntil != null && now < blockedUntil) return@forEach
+            if (blockedUntil != null && now < blockedUntil) {
+                currentlyBlocked.add(pkg)
+                return@forEach
+            }
 
             // Usage counted safely using precise event parsing within window
             val usageMs = getForegroundTimeMs(pkg, cycleStart, now)
@@ -437,18 +477,53 @@ when (action) {
 
             if (usageMins >= allowanceMins) {
                 newlyExceeded.add(pkg)
-                // Deterministic expiry: cycle start + full window, not now + window.
                 blockMap[pkg] = cycleStart + windowMs
             }
+        }
+
+        // Check if locked state pending stop was requested and cycle reset happened
+        if (cycleResetOccurred && prefs.isHourlyPendingStopNextCycle()) {
+            Log.i(TAG, "Cycle reset reached with pending stop requested! Disabling usage limit.")
+            prefs.setHourlyMonitoringActive(false)
+            prefs.clearHourlyLockedState()
+            prefs.setHourlyPendingStopNextCycle(false)
+
+            val allHourly = prefs.getHourlyApps()
+            if (allHourly.isNotEmpty()) {
+                shizukuEngine.unsuspendPackages(allHourly)
+            }
+            prefs.setHourlyBlockUntilMap(emptyMap())
+            prefs.setHourlyCycleStartMap(emptyMap())
+            cancelNextUnblockAlarm()
+            updateNotification("Usage Limit ended at cycle boundary as requested.")
+            return
         }
 
         if (toUnblock.isNotEmpty() && !prefs.isDetoxActive()) {
             Log.d(TAG, "Cycle reset, unsuspending: $toUnblock")
             shizukuEngine.unsuspendPackages(toUnblock)
         }
-        if (newlyExceeded.isNotEmpty()) {
-            Log.d(TAG, "Limit hit, suspending: $newlyExceeded")
-            shizukuEngine.suspendPackages(newlyExceeded)
+
+        // SHIZUKU CRASH & RESTART RESILIENT SUSPENSION:
+        // Collect all apps that MUST be suspended: newly exceeded apps + any currently blocked apps
+        // that are not actually suspended in Android OS (e.g. Shizuku crashed, restarted, or call previously failed)
+        val needSuspension = mutableSetOf<String>()
+        needSuspension.addAll(newlyExceeded)
+
+        currentlyBlocked.forEach { pkg ->
+            if (!shizukuEngine.isPackageSuspended(pkg)) {
+                Log.w(TAG, "App $pkg is marked blocked until ${blockMap[pkg]} but is NOT suspended (Shizuku crash/restart recovery). Re-suspending.")
+                needSuspension.add(pkg)
+            }
+        }
+
+        if (needSuspension.isNotEmpty()) {
+            Log.d(TAG, "Enforcing suspension for ${needSuspension.size} apps: $needSuspension")
+            shizukuEngine.suspendPackages(needSuspension) { successful, failed ->
+                if (failed.isNotEmpty()) {
+                    Log.w(TAG, "${failed.size} apps failed suspension during limit trigger (Shizuku crash/restart). Engine will auto-retry upon binder reconnect.")
+                }
+            }
         }
 
         prefs.setHourlyBlockUntilMap(blockMap)
@@ -467,14 +542,12 @@ when (action) {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        if (prefs.getHourlyApps().isEmpty()) {
+        if (prefs.getHourlyApps().isEmpty() || !prefs.isHourlyMonitoringActive()) {
             alarmManager.cancel(pendingIntent)
             return
         }
 
         val now = System.currentTimeMillis()
-        // Always keep re-checking every minute so apps under the limit get
-        // caught as they approach it, not just already-blocked ones.
         val periodicRecheck = now + 60_000L
         val earliestExpiry = blockMap.values.minOrNull()
         val targetTime = if (earliestExpiry == null) {
@@ -491,12 +564,6 @@ when (action) {
             }
         } catch (e: Exception) {
             Log.e(TAG, "Failed to schedule exact unblock alarm", e)
-        }
-    }
-
-    private fun suspendAllPackages() {
-        if (lockedPackages.isNotEmpty()) {
-            shizukuEngine.suspendPackages(lockedPackages)
         }
     }
 
@@ -537,6 +604,7 @@ when (action) {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onDestroy() {
+        shizukuEngine.release()
         countDownTimer?.cancel()
         cancelNextNightAlarm()
         cancelNextUnblockAlarm()

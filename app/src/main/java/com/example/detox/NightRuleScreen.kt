@@ -1,11 +1,17 @@
 package com.example.detox.ui.screens
 
 import android.widget.Toast
+import androidx.compose.animation.*
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowForward
 import androidx.compose.material.icons.filled.Bolt
+import androidx.compose.material.icons.filled.HourglassTop
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Nightlight
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -26,8 +32,8 @@ import java.util.Locale
 fun NightRuleScreen(preferences: DetoxPreferences) {
     val context = LocalContext.current
 
-    var activeDays by remember { mutableStateOf(preferences.getNightDays()) }
-    var selectedApps by remember { mutableStateOf(preferences.getNightApps()) }
+    var activeDays by remember { mutableStateOf<Set<Int>>(preferences.getNightDays()) }
+    var selectedApps by remember { mutableStateOf<Set<String>>(preferences.getNightApps()) }
     var showAppPicker by remember { mutableStateOf(false) }
 
     val initialStart = remember { preferences.getNightStart() }
@@ -40,15 +46,21 @@ fun NightRuleScreen(preferences: DetoxPreferences) {
 
     var showStartPicker by remember { mutableStateOf(false) }
     var showEndPicker by remember { mutableStateOf(false) }
+    var showPendingStopConfirmDialog by remember { mutableStateOf(false) }
 
-    var isActive by remember { mutableStateOf(preferences.isNightMonitoringActive()) }
+    var isActive by remember { mutableStateOf<Boolean>(preferences.isNightMonitoringActive()) }
+    var isLocked by remember { mutableStateOf<Boolean>(preferences.isNightLockedState()) }
+    var isPendingStop by remember { mutableStateOf<Boolean>(preferences.isNightPendingStopNextCycle()) }
+
+    val scrollState = rememberScrollState()
 
     Box(modifier = Modifier.fillMaxSize()) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .verticalScroll(scrollState)
                 .padding(horizontal = 20.dp)
-                .padding(bottom = 80.dp)
+                .padding(bottom = 96.dp)
         ) {
             Spacer(modifier = Modifier.height(16.dp))
 
@@ -63,6 +75,133 @@ fun NightRuleScreen(preferences: DetoxPreferences) {
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
+
+            // Locked State Banner if active
+            AnimatedVisibility(
+                visible = isLocked,
+                enter = fadeIn() + expandVertically(),
+                exit = fadeOut() + shrinkVertically()
+            ) {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 12.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = if (isPendingStop)
+                            MaterialTheme.colorScheme.tertiaryContainer
+                        else
+                            MaterialTheme.colorScheme.primaryContainer
+                    )
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(14.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = if (isPendingStop) Icons.Default.HourglassTop else Icons.Default.Lock,
+                            contentDescription = null,
+                            tint = if (isPendingStop)
+                                MaterialTheme.colorScheme.onTertiaryContainer
+                            else
+                                MaterialTheme.colorScheme.onPrimaryContainer,
+                            modifier = Modifier.size(24.dp)
+                        )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = if (isPendingStop)
+                                    "Pending Stop (At Window End)"
+                                else
+                                    "Scheduled Locked State Active",
+                                fontWeight = FontWeight.Bold,
+                                style = MaterialTheme.typography.titleSmall,
+                                color = if (isPendingStop)
+                                    MaterialTheme.colorScheme.onTertiaryContainer
+                                else
+                                    MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                            Text(
+                                text = if (isPendingStop)
+                                    "Stopping queued. Apps will remain blocked until current scheduled window ends."
+                                else
+                                    "Locked mode active: Stopping running blocks immediately is prohibited.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = if (isPendingStop)
+                                    MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.85f)
+                                else
+                                    MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.85f)
+                            )
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(18.dp))
+
+            // Locked Mode Control Card
+            ElevatedCard(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.elevatedCardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+                )
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Outlined.Lock,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "Locked State",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = if (isLocked)
+                                "Immediate stop disabled; will stop after current block window finishes"
+                            else
+                                "Prevents stopping running blocks during active schedule",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+
+                    Switch(
+                        checked = isLocked,
+                        onCheckedChange = { enable ->
+                            if (enable) {
+                                preferences.setNightLockedState(true)
+                                isLocked = true
+                                isPendingStop = false
+                                Toast.makeText(context, "Scheduled locked state enabled", Toast.LENGTH_SHORT).show()
+                            } else {
+                                if (isActive && preferences.isNightBlockActiveNow()) {
+                                    showPendingStopConfirmDialog = true
+                                } else {
+                                    preferences.setNightLockedState(false)
+                                    isLocked = false
+                                    isPendingStop = false
+                                    Toast.makeText(context, "Scheduled locked state cleared", Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        }
+                    )
+                }
+            }
 
             Spacer(modifier = Modifier.height(20.dp))
 
@@ -195,17 +334,26 @@ fun NightRuleScreen(preferences: DetoxPreferences) {
                     selectedApps = updated
                     preferences.setNightApps(updated)
                 },
-                modifier = Modifier.weight(1f)
+                modifier = Modifier.fillMaxWidth()
             )
+
+            // Extra generous bottom spacer so content scrolls completely clear of the FAB
+            Spacer(modifier = Modifier.height(140.dp))
         }
 
+        // Active FAB with Locked State protection
         ExtendedFloatingActionButton(
             onClick = {
                 if (isActive) {
-                    DetoxTimerService.stopNightMonitoring(context)
-                    preferences.setNightMonitoringActive(false)
-                    isActive = false
-                    Toast.makeText(context, "Scheduled block stopped", Toast.LENGTH_SHORT).show()
+                    if (isLocked && preferences.isNightBlockActiveNow()) {
+                        // Running and locked: prompt to queue stop at window end
+                        showPendingStopConfirmDialog = true
+                    } else {
+                        DetoxTimerService.stopNightMonitoring(context)
+                        preferences.setNightMonitoringActive(false)
+                        isActive = false
+                        Toast.makeText(context, "Scheduled block stopped", Toast.LENGTH_SHORT).show()
+                    }
                 } else {
                     DetoxTimerService.startNightMonitoring(context)
                     preferences.setNightMonitoringActive(true)
@@ -215,22 +363,80 @@ fun NightRuleScreen(preferences: DetoxPreferences) {
             },
             icon = {
                 Icon(
-                    if (isActive) Icons.Default.Bolt else Icons.Default.PlayArrow,
+                    when {
+                        isActive && isPendingStop -> Icons.Default.HourglassTop
+                        isActive && isLocked -> Icons.Default.Lock
+                        isActive -> Icons.Default.Bolt
+                        else -> Icons.Default.PlayArrow
+                    },
                     contentDescription = null
                 )
             },
-            text = { Text(if (isActive) "Active" else "Start") },
-            containerColor = if (isActive)
-                MaterialTheme.colorScheme.primary
-            else
-                MaterialTheme.colorScheme.primaryContainer,
-            contentColor = if (isActive)
-                MaterialTheme.colorScheme.onPrimary
-            else
-                MaterialTheme.colorScheme.onPrimaryContainer,
+            text = {
+                Text(
+                    when {
+                        isActive && isPendingStop -> "Stopping Next Cycle"
+                        isActive && isLocked -> "Locked Active"
+                        isActive -> "Active"
+                        else -> "Start"
+                    }
+                )
+            },
+            containerColor = when {
+                isActive && isPendingStop -> MaterialTheme.colorScheme.tertiary
+                isActive && isLocked -> MaterialTheme.colorScheme.error
+                isActive -> MaterialTheme.colorScheme.primary
+                else -> MaterialTheme.colorScheme.primaryContainer
+            },
+            contentColor = when {
+                isActive && isPendingStop -> MaterialTheme.colorScheme.onTertiary
+                isActive && isLocked -> MaterialTheme.colorScheme.onError
+                isActive -> MaterialTheme.colorScheme.onPrimary
+                else -> MaterialTheme.colorScheme.onPrimaryContainer
+            },
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .padding(bottom = 16.dp)
+        )
+    }
+
+    if (showPendingStopConfirmDialog) {
+        AlertDialog(
+            onDismissRequest = { showPendingStopConfirmDialog = false },
+            icon = {
+                Icon(
+                    imageVector = Icons.Default.HourglassTop,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary
+                )
+            },
+            title = { Text("Locked Scheduled Block") },
+            text = {
+                Text(
+                    text = "Stopping is prevented during an active locked scheduled window.\n\nWould you like to schedule stopping when the current block window finishes? Once it ends, the block will not resume."
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        preferences.setNightPendingStopNextCycle(true)
+                        isPendingStop = true
+                        showPendingStopConfirmDialog = false
+                        Toast.makeText(
+                            context,
+                            "Scheduled block will terminate after current window finishes.",
+                            Toast.LENGTH_LONG
+                        ).show()
+                    }
+                ) {
+                    Text("Stop Next Cycle")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showPendingStopConfirmDialog = false }) {
+                    Text("Keep Active")
+                }
+            }
         )
     }
 

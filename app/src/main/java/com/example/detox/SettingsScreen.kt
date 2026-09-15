@@ -2,15 +2,31 @@ package com.example.detox.ui.screens
 
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Code
+import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.Security
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.Verified
+import androidx.compose.material.icons.outlined.OpenInNew
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
@@ -39,7 +55,7 @@ fun SettingsScreen(
 ) {
     val context = LocalContext.current
     var themeMode by remember { mutableIntStateOf(preferences.getThemeMode()) }
-    var startOnBoot by remember { mutableStateOf(preferences.getStartOnBoot()) }
+    var startOnBoot by remember { mutableStateOf<Boolean>(preferences.getStartOnBoot()) }
     var expandedThemeDropdown by remember { mutableStateOf(false) }
 
     val themeOptions = listOf("System Default", "Light", "Dark", "AMOLED Dark")
@@ -183,7 +199,7 @@ fun SettingsScreen(
 
         // Developer Information
         Text(
-            text = "About",
+            text = "Developer & Project",
             fontSize = 14.sp,
             fontWeight = FontWeight.SemiBold,
             color = MaterialTheme.colorScheme.primary,
@@ -202,6 +218,7 @@ fun ShizukuStateCard(shizukuEngine: ShizukuPackageEngine) {
     var connectionStatus by remember { mutableStateOf(ShizukuConnectionStatus.NOT_RUNNING) }
     var runningUid by remember { mutableIntStateOf(-1) }
     var detectedManager by remember { mutableStateOf("Not Installed") }
+    var pendingOperationsCount by remember { mutableIntStateOf(0) }
 
     fun refreshState() {
         val pm = context.packageManager
@@ -224,6 +241,8 @@ fun ShizukuStateCard(shizukuEngine: ShizukuPackageEngine) {
             hasStandard || hasPlus || isBinderAlive -> "Shizuku"
             else -> "Not Installed"
         }
+
+        pendingOperationsCount = shizukuEngine.getPendingOperationsCount()
 
         if (!isBinderAlive) {
             connectionStatus = ShizukuConnectionStatus.NOT_RUNNING
@@ -304,24 +323,34 @@ fun ShizukuStateCard(shizukuEngine: ShizukuPackageEngine) {
             Spacer(modifier = Modifier.height(4.dp))
 
             Text(
-                text = "Detected Engine: $detectedManager",
+                text = "Detected Engine: $detectedManager | Crash Recovery: Active",
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Medium,
                 color = contentColor.copy(alpha = 0.9f)
             )
+
+            if (pendingOperationsCount > 0) {
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "⚠️ $pendingOperationsCount package operation(s) queued for auto-retry on reconnect",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.error
+                )
+            }
 
             Spacer(modifier = Modifier.height(6.dp))
 
             val descriptionText = when (connectionStatus) {
                 ShizukuConnectionStatus.RUNNING_AUTHORIZED -> {
                     val uidType = if (runningUid == 0) "Root (UID 0)" else "ADB (UID $runningUid)"
-                    "Service active and authorized. Executing via $uidType."
+                    "Service active and authorized. Executing via $uidType with crash-resilient retry queue."
                 }
                 ShizukuConnectionStatus.RUNNING_NOT_AUTHORIZED -> {
                     "Service is running, but permission has not been granted to Detox."
                 }
                 ShizukuConnectionStatus.NOT_RUNNING -> {
-                    "Service is not running or binder is unreachable. Start Shizuku+ via ADB or Wireless Debugging."
+                    "Service is not running or binder is unreachable. Start Shizuku via ADB or Wireless Debugging. Suspensions will auto-resume once started."
                 }
             }
 
@@ -353,16 +382,40 @@ fun ShizukuStateCard(shizukuEngine: ShizukuPackageEngine) {
                 ) {
                     Text(text = "Refresh", color = contentColor)
                 }
+
+                if (pendingOperationsCount > 0 && connectionStatus == ShizukuConnectionStatus.RUNNING_AUTHORIZED) {
+                    FilledTonalButton(
+                        onClick = {
+                            shizukuEngine.retryPendingOperations()
+                            refreshState()
+                        }
+                    ) {
+                        Text("Retry Queue ($pendingOperationsCount)")
+                    }
+                }
             }
         }
     }
 }
 
+/**
+ * Enhanced Developer Card
+ * Sleek, professional profile card highlighting developer Damindu Harsha,
+ * project stats, and verified credentials.
+ */
 @Composable
 fun DeveloperCard() {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+    val context = LocalContext.current
+
+    OutlinedCard(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = 24.dp),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.outlinedCardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+        ),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
     ) {
         Row(
             modifier = Modifier
@@ -370,25 +423,59 @@ fun DeveloperCard() {
                 .padding(16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Icon(
-                imageVector = Icons.Default.Favorite,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier
-                    .size(40.dp)
-                    .padding(end = 12.dp)
-            )
-            Column {
+            Surface(
+                modifier = Modifier.size(44.dp),
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.primaryContainer,
+                contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Text(
+                        text = "DH",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.width(14.dp))
+
+            Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = "Damindu Harsha",
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Bold
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface
                 )
                 Text(
-                    text = "Made with ❤️ by Damindu Harsha",
-                    fontSize = 12.sp,
+                    text = "Developer • Aegis Detox v1.0.0",
+                    style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+            }
+
+            FilledTonalButton(
+                onClick = {
+                    try {
+                        val emailIntent = Intent(Intent.ACTION_SENDTO).apply {
+                            data = Uri.parse("mailto:daminduharsah11@gmail.com")
+                            putExtra(Intent.EXTRA_SUBJECT, "Feedback on Aegis Detox")
+                        }
+                        context.startActivity(emailIntent)
+                    } catch (_: Exception) {
+                        showToast(context, "Developer email: daminduharsah11@gmail.com")
+                    }
+                },
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                modifier = Modifier.height(36.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Email,
+                    contentDescription = "Email",
+                    modifier = Modifier.size(16.dp)
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text("Contact", style = MaterialTheme.typography.labelMedium)
             }
         }
     }
