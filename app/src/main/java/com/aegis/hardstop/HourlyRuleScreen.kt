@@ -57,6 +57,18 @@ fun HourlyRuleScreen(preferences: DetoxPreferences) {
     var lockedEndTime by remember { mutableLongStateOf(preferences.getHourlyLockedUntilTime()) }
     var lockedCycles by remember { mutableIntStateOf(preferences.getHourlyLockedCycles()) }
 
+    // Auto-sync state periodically to reflect background cycle resets immediately
+    LaunchedEffect(Unit) {
+        while (true) {
+            isActive = preferences.isHourlyMonitoringActive()
+            isLocked = preferences.isHourlyLockedState()
+            isPendingStop = preferences.isHourlyPendingStopNextCycle()
+            lockedEndTime = preferences.getHourlyLockedUntilTime()
+            lockedCycles = preferences.getHourlyLockedCycles()
+            kotlinx.coroutines.delay(1000)
+        }
+    }
+
     val scrollState = rememberScrollState()
 
     fun formatTimestamp(timestamp: Long): String {

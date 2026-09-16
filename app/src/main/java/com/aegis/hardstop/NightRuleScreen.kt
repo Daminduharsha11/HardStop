@@ -52,6 +52,16 @@ fun NightRuleScreen(preferences: DetoxPreferences) {
     var isLocked by remember { mutableStateOf<Boolean>(preferences.isNightLockedState()) }
     var isPendingStop by remember { mutableStateOf<Boolean>(preferences.isNightPendingStopNextCycle()) }
 
+    // Auto-sync state periodically to reflect background window resets immediately
+    LaunchedEffect(Unit) {
+        while (true) {
+            isActive = preferences.isNightMonitoringActive()
+            isLocked = preferences.isNightLockedState()
+            isPendingStop = preferences.isNightPendingStopNextCycle()
+            kotlinx.coroutines.delay(1000)
+        }
+    }
+
     val scrollState = rememberScrollState()
 
     Box(modifier = Modifier.fillMaxSize()) {

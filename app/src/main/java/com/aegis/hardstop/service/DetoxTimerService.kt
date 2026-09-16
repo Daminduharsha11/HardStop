@@ -452,8 +452,13 @@ class DetoxTimerService : Service() {
         hourlyApps.forEach { pkg ->
             var cycleStart = cycleStartMap[pkg]
 
-            // Deterministic reset: exactly windowMs after THIS app's cycle began
-            if (cycleStart == null || now - cycleStart >= windowMs) {
+            // Deterministic reset: ONLY after full windowMs has elapsed since cycleStart was established
+            if (cycleStart == null) {
+                // First initialization of cycleStart for this app — NOT a cycle reset!
+                cycleStart = now
+                cycleStartMap[pkg] = now
+            } else if (now - cycleStart >= windowMs) {
+                // Genuine cycle reset after full windowMs duration
                 cycleResetOccurred = true
                 cycleStart = now
                 cycleStartMap[pkg] = now
@@ -542,19 +547,40 @@ class DetoxTimerService : Service() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        if (prefs.getHourlyApps().isEmpty() || !prefs.isHourlyMonitoringActive()) {
+        val hourlyApps = prefs.getHourlyApps()
+        if (hourlyApps.isEmpty() || !prefs.isHourlyMonitoringActive()) {
             alarmManager.cancel(pendingIntent)
             return
         }
 
         val now = System.currentTimeMillis()
-        val periodicRecheck = now + 60_000L
-        val earliestExpiry = blockMap.values.minOrNull()
-        val targetTime = if (earliestExpiry == null) {
-            periodicRecheck
-        } else {
-            minOf(if (earliestExpiry <= now) now + 1000L else earliestExpiry, periodicRecheck)
+        val allowanceMs = prefs.getAllowanceMins() * 60_000L
+        val cycleStartMap = prefs.getHourlyCycleStartMap()
+        var minNextWakeup = Long.MAX_VALUE
+
+        hourlyApps.forEach { pkg ->
+            val blockedUntil = blockMap[pkg]
+            if (blockedUntil != null && blockedUntil > now) {
+                // App is currently BLOCKED (suspended) -> usage is 0 while suspended, target exact unblock timestamp
+                minNextWakeup = minOf(minNextWakeup, blockedUntil)
+            } else {
+                // App is UNBLOCKED -> active usage tracking phase
+                val cycleStart = cycleStartMap[pkg] ?: now
+                val usageMs = getForegroundTimeMs(pkg, cycleStart, now)
+                val remainingMs = maxOf(0L, allowanceMs - usageMs)
+
+                if (remainingMs > 0) {
+                    // Monitor active usage dynamically: check every 60s or when allowance runs out
+                    val nextCheck = now + minOf(60_000L, remainingMs)
+                    minNextWakeup = minOf(minNextWakeup, nextCheck)
+                } else {
+                    // Allowance exhausted, trigger block evaluation immediately
+                    minNextWakeup = minOf(minNextWakeup, now + 1000L)
+                }
+            }
         }
+
+        val targetTime = if (minNextWakeup != Long.MAX_VALUE) minNextWakeup else now + 60_000L
 
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
@@ -562,6 +588,7 @@ class DetoxTimerService : Service() {
             } else {
                 alarmManager.setExact(AlarmManager.RTC_WAKEUP, targetTime, pendingIntent)
             }
+            Log.d(TAG, "Scheduled next hourly rule evaluation at $targetTime (in ${(targetTime - now) / 1000}s)")
         } catch (e: Exception) {
             Log.e(TAG, "Failed to schedule exact unblock alarm", e)
         }
