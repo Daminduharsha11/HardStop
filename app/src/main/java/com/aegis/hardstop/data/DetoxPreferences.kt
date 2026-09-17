@@ -236,8 +236,20 @@ class DetoxPreferences(context: Context) {
     fun isHostsBlockingEnabled(): Boolean = prefs.getBoolean(KEY_HOSTS_BLOCKING_ENABLED, false)
     fun setHostsBlockingEnabled(enabled: Boolean) = prefs.edit().putBoolean(KEY_HOSTS_BLOCKING_ENABLED, enabled).apply()
 
-    fun getBlockedDomains(): Set<String> = prefs.getStringSet(KEY_BLOCKED_DOMAINS, setOf("facebook.com", "instagram.com", "tiktok.com", "twitter.com", "x.com")) ?: emptySet()
-    fun setBlockedDomains(domains: Set<String>) = prefs.edit().putStringSet(KEY_BLOCKED_DOMAINS, domains).apply()
+    fun getBlockedDomains(): Set<String> {
+        val defaultSet = setOf("facebook.com", "instagram.com", "tiktok.com", "twitter.com", "x.com")
+        return try {
+            prefs.getStringSet(KEY_BLOCKED_DOMAINS, defaultSet)?.toSet() ?: defaultSet
+        } catch (e: Exception) {
+            defaultSet
+        }
+    }
+
+    fun setBlockedDomains(domains: Set<String>) {
+        try {
+            prefs.edit().putStringSet(KEY_BLOCKED_DOMAINS, HashSet(domains)).apply()
+        } catch (_: Exception) {}
+    }
 
     fun isHmacSpoofingEnabled(): Boolean = prefs.getBoolean(KEY_HMAC_SPOOFING_ENABLED, false)
     fun setHmacSpoofingEnabled(enabled: Boolean) = prefs.edit().putBoolean(KEY_HMAC_SPOOFING_ENABLED, enabled).apply()

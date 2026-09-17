@@ -9,6 +9,7 @@ import android.os.PowerManager
 import android.provider.Settings
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -21,6 +22,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.res.painterResource
@@ -41,18 +43,18 @@ enum class ShizukuConnectionStatus {
     NOT_RUNNING
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
     preferences: DetoxPreferences,
     shizukuEngine: ShizukuPackageEngine,
+    onThemeChanged: (Int) -> Unit = {},
     onNavigateBack: () -> Unit = {}
 ) {
     val context = LocalContext.current
     var themeMode by remember { mutableIntStateOf(preferences.getThemeMode()) }
     var startOnBoot by remember { mutableStateOf(preferences.getStartOnBoot()) }
     var headlessService by remember { mutableStateOf(preferences.isHeadlessServiceEnabled()) }
-    var expandedThemeDropdown by remember { mutableStateOf(false) }
+    var showThemeMenu by remember { mutableStateOf(false) }
 
     // Experimental state
     var hostsBlockingEnabled by remember { mutableStateOf(preferences.isHostsBlockingEnabled()) }
@@ -103,38 +105,57 @@ fun SettingsScreen(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(text = "App Theme", fontSize = 15.sp, fontWeight = FontWeight.Medium)
-                    ExposedDropdownMenuBox(
-                        expanded = expandedThemeDropdown,
-                        onExpandedChange = { expandedThemeDropdown = !expandedThemeDropdown },
-                        modifier = Modifier.width(160.dp)
-                    ) {
-                        OutlinedTextField(
-                            value = themeOptions.getOrElse(themeMode) { "System Default" },
-                            onValueChange = {},
-                            readOnly = true,
-                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedThemeDropdown) },
-                            modifier = Modifier.menuAnchor(),
-                            colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(),
-                            textStyle = LocalTextStyle.current.copy(fontSize = 13.sp)
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(text = "App Theme", fontSize = 15.sp, fontWeight = FontWeight.Medium)
+                        Text(
+                            text = themeOptions.getOrElse(themeMode) { "System Default" },
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
+                    }
 
-                        ExposedDropdownMenu(
-                            expanded = expandedThemeDropdown,
-                            onDismissRequest = { expandedThemeDropdown = false }
+                    Box {
+                        OutlinedCard(
+                            onClick = { showThemeMenu = true },
+                            shape = RoundedCornerShape(8.dp),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = themeOptions.getOrElse(themeMode) { "System Default" },
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Medium
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Icon(
+                                    Icons.Default.ArrowDropDown,
+                                    contentDescription = "Select Theme",
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                        }
+
+                        DropdownMenu(
+                            expanded = showThemeMenu,
+                            onDismissRequest = { showThemeMenu = false }
                         ) {
                             themeOptions.forEachIndexed { index, title ->
                                 DropdownMenuItem(
-                                    text = { Text(title, fontSize = 13.sp) },
+                                    text = {
+                                        Text(
+                                            text = title,
+                                            fontSize = 13.sp,
+                                            fontWeight = if (index == themeMode) FontWeight.Bold else FontWeight.Normal
+                                        )
+                                    },
                                     onClick = {
                                         themeMode = index
                                         preferences.setThemeMode(index)
-                                        expandedThemeDropdown = false
-                                        showToast(context, "Applying theme...")
-                                        val intent = Intent(context, MainActivity::class.java).apply {
-                                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
-                                        }
-                                        context.startActivity(intent)
+                                        showThemeMenu = false
+                                        onThemeChanged(index)
                                     }
                                 )
                             }
@@ -166,7 +187,9 @@ fun SettingsScreen(
                         headlessService = enabled
                         preferences.setHeadlessServiceEnabled(enabled)
                         if (enabled) {
-                            DetoxTimerService.evaluateRules(context)
+                            try {
+                                DetoxTimerService.evaluateRules(context)
+                            } catch (_: Exception) {}
                         }
                     }
                 )
@@ -175,7 +198,9 @@ fun SettingsScreen(
 
                 // Battery Optimization
                 val powerManager = context.getSystemService(Context.POWER_SERVICE) as? PowerManager
-                val isBatteryOptimizedIgnored = powerManager?.isIgnoringBatteryOptimizations(context.packageName) == true
+                val isBatteryOptimizedIgnored = try {
+                    powerManager?.isIgnoringBatteryOptimizations(context.packageName) == true
+                } catch (_: Exception) { false }
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -230,8 +255,12 @@ fun SettingsScreen(
                     onCheckedChange = { enabled ->
                         hostsBlockingEnabled = enabled
                         preferences.setHostsBlockingEnabled(enabled)
-                        shizukuEngine.applyHostsDomainBlock(blockedDomains, enabled) { _, msg ->
-                            showToast(context, msg)
+                        try {
+                            shizukuEngine.applyHostsDomainBlock(blockedDomains, enabled) { _, msg ->
+                                showToast(context, msg)
+                            }
+                        } catch (e: Exception) {
+                            showToast(context, "Hosts edit failed: ${e.message}")
                         }
                     }
                 )
@@ -262,8 +291,12 @@ fun SettingsScreen(
                             Spacer(modifier = Modifier.width(6.dp))
                             FilledTonalButton(
                                 onClick = {
-                                    shizukuEngine.applyHostsDomainBlock(blockedDomains, true) { _, msg ->
-                                        showToast(context, msg)
+                                    try {
+                                        shizukuEngine.applyHostsDomainBlock(blockedDomains, true) { _, msg ->
+                                            showToast(context, msg)
+                                        }
+                                    } catch (e: Exception) {
+                                        showToast(context, "Hosts sync failed: ${e.message}")
                                     }
                                 },
                                 modifier = Modifier.height(32.dp),
@@ -293,8 +326,12 @@ fun SettingsScreen(
                     }
                     OutlinedButton(
                         onClick = {
-                            exportedJsonText = preferences.exportDataPayload()
-                            showExportDialog = true
+                            try {
+                                exportedJsonText = preferences.exportDataPayload()
+                                showExportDialog = true
+                            } catch (e: Exception) {
+                                showToast(context, "Export error: ${e.message}")
+                            }
                         },
                         modifier = Modifier.height(34.dp),
                         contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp)
@@ -402,7 +439,9 @@ fun SettingsScreen(
                     onClick = {
                         showDomainsDialog = false
                         if (hostsBlockingEnabled) {
-                            shizukuEngine.applyHostsDomainBlock(blockedDomains, true) { _, msg -> showToast(context, msg) }
+                            try {
+                                shizukuEngine.applyHostsDomainBlock(blockedDomains, true) { _, msg -> showToast(context, msg) }
+                            } catch (_: Exception) {}
                         }
                     }
                 ) {
@@ -440,12 +479,16 @@ fun SettingsScreen(
             confirmButton = {
                 TextButton(
                     onClick = {
-                        val sendIntent = Intent().apply {
-                            action = Intent.ACTION_SEND
-                            putExtra(Intent.EXTRA_TEXT, exportedJsonText)
-                            type = "text/plain"
+                        try {
+                            val sendIntent = Intent().apply {
+                                action = Intent.ACTION_SEND
+                                putExtra(Intent.EXTRA_TEXT, exportedJsonText)
+                                type = "text/plain"
+                            }
+                            context.startActivity(Intent.createChooser(sendIntent, "Share Configuration Export"))
+                        } catch (e: Exception) {
+                            showToast(context, "Could not share: ${e.message}")
                         }
-                        context.startActivity(Intent.createChooser(sendIntent, "Share Configuration Export"))
                         showExportDialog = false
                     }
                 ) {
@@ -502,11 +545,6 @@ fun CompactSettingToggle(
     }
 }
 
-// Small scale modifier helper
-fun Modifier.scale(scale: Float): Modifier = this.then(
-    Modifier.padding(0.dp)
-)
-
 @Composable
 fun ShizukuStateCard(shizukuEngine: ShizukuPackageEngine) {
     val context = LocalContext.current
@@ -517,26 +555,35 @@ fun ShizukuStateCard(shizukuEngine: ShizukuPackageEngine) {
     var pendingOperationsCount by remember { mutableIntStateOf(0) }
 
     fun refreshState() {
-        val isBinderAlive = try { Shizuku.pingBinder() } catch (_: Exception) { false }
-        pendingOperationsCount = shizukuEngine.getPendingOperationsCount()
+        try {
+            val isBinderAlive = try { Shizuku.pingBinder() } catch (_: Throwable) { false }
+            pendingOperationsCount = try { shizukuEngine.getPendingOperationsCount() } catch (_: Throwable) { 0 }
 
-        if (!isBinderAlive) {
+            if (!isBinderAlive) {
+                connectionStatus = ShizukuConnectionStatus.NOT_RUNNING
+                runningUid = -1
+                return
+            }
+
+            val hasPermission = try {
+                Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED
+            } catch (_: Throwable) { false }
+
+            if (hasPermission) {
+                connectionStatus = ShizukuConnectionStatus.RUNNING_AUTHORIZED
+                runningUid = try { Shizuku.getUid() } catch (_: Throwable) { -1 }
+            } else {
+                connectionStatus = ShizukuConnectionStatus.RUNNING_NOT_AUTHORIZED
+                runningUid = -1
+            }
+        } catch (_: Throwable) {
             connectionStatus = ShizukuConnectionStatus.NOT_RUNNING
             runningUid = -1
-            return
         }
+    }
 
-        val hasPermission = try {
-            Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED
-        } catch (_: Exception) { false }
-
-        if (hasPermission) {
-            connectionStatus = ShizukuConnectionStatus.RUNNING_AUTHORIZED
-            runningUid = try { Shizuku.getUid() } catch (_: Exception) { -1 }
-        } else {
-            connectionStatus = ShizukuConnectionStatus.RUNNING_NOT_AUTHORIZED
-            runningUid = -1
-        }
+    LaunchedEffect(Unit) {
+        refreshState()
     }
 
     DisposableEffect(lifecycleOwner) {
@@ -625,7 +672,13 @@ fun ShizukuStateCard(shizukuEngine: ShizukuPackageEngine) {
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 if (connectionStatus == ShizukuConnectionStatus.RUNNING_NOT_AUTHORIZED) {
                     Button(
-                        onClick = { shizukuEngine.requestShizukuPermission(MainActivity.SHIZUKU_PERMISSION_REQUEST_CODE) },
+                        onClick = {
+                            try {
+                                shizukuEngine.requestShizukuPermission(MainActivity.SHIZUKU_PERMISSION_REQUEST_CODE)
+                            } catch (e: Exception) {
+                                showToast(context, "Permission request failed: ${e.message}")
+                            }
+                        },
                         modifier = Modifier.height(32.dp),
                         contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = contentColor, contentColor = cardContainerColor)
@@ -645,8 +698,10 @@ fun ShizukuStateCard(shizukuEngine: ShizukuPackageEngine) {
                 if (pendingOperationsCount > 0 && connectionStatus == ShizukuConnectionStatus.RUNNING_AUTHORIZED) {
                     FilledTonalButton(
                         onClick = {
-                            shizukuEngine.retryPendingOperations()
-                            refreshState()
+                            try {
+                                shizukuEngine.retryPendingOperations()
+                                refreshState()
+                            } catch (_: Exception) {}
                         },
                         modifier = Modifier.height(32.dp),
                         contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp)
@@ -660,7 +715,7 @@ fun ShizukuStateCard(shizukuEngine: ShizukuPackageEngine) {
 }
 
 /**
- * Developer Card with App Launcher Icon
+ * Developer Card with Safe Vector Logo
  */
 @Composable
 fun DeveloperCard() {
@@ -682,14 +737,23 @@ fun DeveloperCard() {
                 .padding(12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // App Icon Resource
-            Image(
-                painter = painterResource(id = R.mipmap.ic_launcher),
-                contentDescription = "App Icon",
-                modifier = Modifier
-                    .size(44.dp)
-                    .clip(CircleShape)
-            )
+            Surface(
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.primaryContainer,
+                modifier = Modifier.size(44.dp)
+            ) {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        painter = painterResource(id = R.drawable.ic_logo_monochrome),
+                        contentDescription = "Aegis Shield Logo",
+                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
+            }
 
             Spacer(modifier = Modifier.width(12.dp))
 

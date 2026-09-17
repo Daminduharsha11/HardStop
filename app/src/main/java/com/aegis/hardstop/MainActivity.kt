@@ -86,9 +86,9 @@ class MainActivity : ComponentActivity() {
         setContent {
             val context = LocalContext.current
             var selectedTab by remember { mutableIntStateOf(0) }
-            val themeMode by remember { mutableIntStateOf(preferences.getThemeMode()) }
+            var currentThemeMode by remember { mutableIntStateOf(preferences.getThemeMode()) }
 
-            DetoxTheme(themeMode = themeMode) {
+            DetoxTheme(themeMode = currentThemeMode) {
                 Scaffold(
                     bottomBar = {
                         NavigationBar {
@@ -133,6 +133,9 @@ class MainActivity : ComponentActivity() {
                                     2 -> SettingsScreen(
                                         preferences = preferences,
                                         shizukuEngine = shizukuEngine,
+                                        onThemeChanged = { newTheme ->
+                                            currentThemeMode = newTheme
+                                        },
                                         onNavigateBack = { selectedTab = 0 }
                                     )
                                 }
