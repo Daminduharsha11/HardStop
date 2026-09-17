@@ -189,6 +189,13 @@ fun SettingsScreen(
                         if (enabled) {
                             try {
                                 DetoxTimerService.evaluateRules(context)
+                                showToast(context, "Headless background monitoring enabled")
+                            } catch (_: Exception) {}
+                        } else {
+                            try {
+                                DetoxTimerService.stopAllBackgroundWork(context)
+                                context.stopService(Intent(context, DetoxTimerService::class.java))
+                                showToast(context, "Headless service stopped - background memory freed")
                             } catch (_: Exception) {}
                         }
                     }
@@ -207,10 +214,25 @@ fun SettingsScreen(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(text = "Battery Optimization", fontSize = 15.sp, fontWeight = FontWeight.Medium)
+                    Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(text = "Battery Optimization", fontSize = 15.sp, fontWeight = FontWeight.Medium)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Surface(
+                                shape = RoundedCornerShape(4.dp),
+                                color = if (isBatteryOptimizedIgnored) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.errorContainer,
+                                contentColor = if (isBatteryOptimizedIgnored) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onErrorContainer
+                            ) {
+                                Text(
+                                    text = if (isBatteryOptimizedIgnored) "UNRESTRICTED" else "OPTIMIZED",
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                )
+                            }
+                        }
                         Text(
-                            text = if (isBatteryOptimizedIgnored) "Unrestricted (recommended)" else "Optimized (may delay background rules)",
+                            text = if (isBatteryOptimizedIgnored) "Background execution unrestricted" else "Optimized (may delay background rules)",
                             fontSize = 12.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -252,6 +274,20 @@ fun SettingsScreen(
                     title = "Host File Domain Block",
                     description = "Redirect domain DNS requests to 127.0.0.1 via system hosts file",
                     checked = hostsBlockingEnabled,
+                    trailingBadge = {
+                        Surface(
+                            shape = RoundedCornerShape(4.dp),
+                            color = MaterialTheme.colorScheme.errorContainer,
+                            contentColor = MaterialTheme.colorScheme.onErrorContainer
+                        ) {
+                            Text(
+                                text = "ROOT",
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                        }
+                    },
                     onCheckedChange = { enabled ->
                         hostsBlockingEnabled = enabled
                         preferences.setHostsBlockingEnabled(enabled)
@@ -358,9 +394,9 @@ fun SettingsScreen(
             }
         }
 
-        // 4. Developer Card
-        SectionHeader("About & Developer")
-        DeveloperCard()
+        // 4. Creator Card
+        SectionHeader("About & Creator")
+        CreatorCard()
     }
 
     // --- Domain Management Dialog ---
@@ -520,7 +556,8 @@ fun CompactSettingToggle(
     title: String,
     description: String,
     checked: Boolean,
-    onCheckedChange: (Boolean) -> Unit
+    onCheckedChange: (Boolean) -> Unit,
+    trailingBadge: @Composable (() -> Unit)? = null
 ) {
     Row(
         modifier = Modifier
@@ -529,8 +566,14 @@ fun CompactSettingToggle(
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(text = title, fontSize = 15.sp, fontWeight = FontWeight.Medium)
+        Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(text = title, fontSize = 15.sp, fontWeight = FontWeight.Medium)
+                if (trailingBadge != null) {
+                    Spacer(modifier = Modifier.width(6.dp))
+                    trailingBadge()
+                }
+            }
             Text(
                 text = description,
                 fontSize = 12.sp,
@@ -540,6 +583,13 @@ fun CompactSettingToggle(
         Switch(
             checked = checked,
             onCheckedChange = onCheckedChange,
+            colors = SwitchDefaults.colors(
+                checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
+                checkedTrackColor = MaterialTheme.colorScheme.primary,
+                uncheckedThumbColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                uncheckedTrackColor = MaterialTheme.colorScheme.surfaceVariant,
+                uncheckedBorderColor = MaterialTheme.colorScheme.outline
+            ),
             modifier = Modifier.scale(0.85f)
         )
     }
@@ -687,12 +737,22 @@ fun ShizukuStateCard(shizukuEngine: ShizukuPackageEngine) {
                     }
                 }
 
-                OutlinedButton(
+                Button(
                     onClick = { refreshState() },
                     modifier = Modifier.height(32.dp),
-                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp)
+                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.tertiary,
+                        contentColor = MaterialTheme.colorScheme.onTertiary
+                    )
                 ) {
-                    Text("Refresh", fontSize = 12.sp, color = contentColor)
+                    Icon(
+                        imageVector = Icons.Default.Refresh,
+                        contentDescription = "Refresh",
+                        modifier = Modifier.size(14.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Refresh", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                 }
 
                 if (pendingOperationsCount > 0 && connectionStatus == ShizukuConnectionStatus.RUNNING_AUTHORIZED) {
@@ -717,82 +777,151 @@ fun ShizukuStateCard(shizukuEngine: ShizukuPackageEngine) {
 /**
  * Developer Card with Safe Vector Logo
  */
+/**
+ * Creator Card with Safe Vector Logo and Clean Multi-Row Layout
+ */
 @Composable
-fun DeveloperCard() {
+fun CreatorCard() {
     val context = LocalContext.current
 
     OutlinedCard(
         modifier = Modifier
             .fillMaxWidth()
             .padding(bottom = 16.dp),
-        shape = RoundedCornerShape(12.dp),
+        shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.outlinedCardColors(
             containerColor = MaterialTheme.colorScheme.surfaceContainerLow
         ),
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
     ) {
-        Row(
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(12.dp),
-            verticalAlignment = Alignment.CenterVertically
+                .padding(16.dp)
         ) {
-            Surface(
-                shape = CircleShape,
-                color = MaterialTheme.colorScheme.primaryContainer,
-                modifier = Modifier.size(44.dp)
+            // Top Row: Avatar, Creator Name, Subtitle, and Single-Line MIT License Chip
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
+                Surface(
+                    shape = CircleShape,
+                    color = MaterialTheme.colorScheme.primaryContainer,
+                    modifier = Modifier.size(46.dp)
                 ) {
-                    Icon(
-                        painter = painterResource(id = R.drawable.ic_logo_monochrome),
-                        contentDescription = "Aegis Shield Logo",
-                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                        modifier = Modifier.size(24.dp)
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            painter = painterResource(id = R.drawable.ic_logo_monochrome),
+                            contentDescription = "Aegis Shield Logo",
+                            tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.width(12.dp))
+
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Damindu Harsha",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        text = "Creator of HardStop",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
+                Surface(
+                    shape = RoundedCornerShape(6.dp),
+                    color = MaterialTheme.colorScheme.secondaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+                ) {
+                    Text(
+                        text = "MIT License",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
                     )
                 }
             }
 
-            Spacer(modifier = Modifier.width(12.dp))
+            Spacer(modifier = Modifier.height(14.dp))
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+            Spacer(modifier = Modifier.height(12.dp))
 
-            Column(modifier = Modifier.weight(1f)) {
+            // Bottom Row: Version indicator on the left, Git & Contact buttons on the right
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 Text(
-                    text = "Damindu Harsha",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                Text(
-                    text = "HardStop(Aegis) v2.4.0",
-                    style = MaterialTheme.typography.bodySmall,
+                    text = "HardStop v2.9.3",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Medium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-            }
 
-            FilledTonalButton(
-                onClick = {
-                    try {
-                        val emailIntent = Intent(Intent.ACTION_SENDTO).apply {
-                            data = Uri.parse("mailto:daminduharsha11@gmail.com")
-                            putExtra(Intent.EXTRA_SUBJECT, "Feedback on Aegis HardStop")
-                        }
-                        context.startActivity(emailIntent)
-                    } catch (_: Exception) {
-                        showToast(context, "Developer email: daminduharsha11@gmail.com")
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(
+                        onClick = {
+                            try {
+                                val gitIntent = Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/Daminduharsha11/HardStop"))
+                                context.startActivity(gitIntent)
+                            } catch (_: Exception) {
+                                try {
+                                    val gitIntent = Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/Daminduharsha11"))
+                                    context.startActivity(gitIntent)
+                                } catch (e: Exception) {
+                                    showToast(context, "GitHub: https://github.com/Daminduharsha11")
+                                }
+                            }
+                        },
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
+                        modifier = Modifier.height(32.dp)
+                    ) {
+                        Icon(
+                            painter = painterResource(id = R.drawable.ic_github),
+                            contentDescription = "GitHub Repository",
+                            tint = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Git", style = MaterialTheme.typography.labelMedium, fontSize = 12.sp)
                     }
-                },
-                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
-                modifier = Modifier.height(32.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Email,
-                    contentDescription = "Email",
-                    modifier = Modifier.size(14.dp)
-                )
-                Spacer(modifier = Modifier.width(4.dp))
-                Text("Contact", style = MaterialTheme.typography.labelMedium, fontSize = 11.sp)
+
+                    FilledTonalButton(
+                        onClick = {
+                            try {
+                                val emailIntent = Intent(Intent.ACTION_SENDTO).apply {
+                                    data = Uri.parse("mailto:daminduharsha11@gmail.com")
+                                    putExtra(Intent.EXTRA_SUBJECT, "Feedback on Aegis HardStop")
+                                }
+                                context.startActivity(emailIntent)
+                            } catch (_: Exception) {
+                                showToast(context, "Creator email: daminduharsha11@gmail.com")
+                            }
+                        },
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
+                        modifier = Modifier.height(32.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Email,
+                            contentDescription = "Email",
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Contact", style = MaterialTheme.typography.labelMedium, fontSize = 12.sp)
+                    }
+                }
             }
         }
     }

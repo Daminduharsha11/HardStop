@@ -35,6 +35,7 @@ open class DetoxTimerService : Service() {
         const val ACTION_STOP_NIGHT_MONITORING = "ACTION_STOP_NIGHT_MONITORING"
         const val ACTION_START_HOURLY_MONITORING = "ACTION_START_HOURLY_MONITORING"
         const val ACTION_START_NIGHT_MONITORING = "ACTION_START_NIGHT_MONITORING"
+        const val ACTION_STOP_ALL_BACKGROUND = "ACTION_STOP_ALL_BACKGROUND"
 
         private const val REQUEST_CODE_NIGHT = 1001
         private const val REQUEST_CODE_UNBLOCK = 1002
@@ -58,13 +59,37 @@ open class DetoxTimerService : Service() {
         }
 
         fun evaluateRules(context: Context) {
+            val prefs = DetoxPreferences(context)
+            if (!prefs.isHeadlessServiceEnabled() && !prefs.isDetoxActive() && !prefs.isHourlyMonitoringActive() && !prefs.isNightMonitoringActive()) {
+                Log.d(TAG, "evaluateRules: Headless service disabled and no active sessions. Skipping.")
+                return
+            }
             val intent = Intent(context, DetoxTimerService::class.java).apply {
                 action = ACTION_EVALUATE_RULES
             }
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                context.startForegroundService(intent)
-            } else {
-                context.startService(intent)
+            try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    context.startForegroundService(intent)
+                } else {
+                    context.startService(intent)
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to start service for rule evaluation", e)
+            }
+        }
+
+        fun stopAllBackgroundWork(context: Context) {
+            val intent = Intent(context, DetoxTimerService::class.java).apply {
+                action = ACTION_STOP_ALL_BACKGROUND
+            }
+            try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    context.startForegroundService(intent)
+                } else {
+                    context.startService(intent)
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to send stop all background work action", e)
             }
         }
 
@@ -142,16 +167,37 @@ open class DetoxTimerService : Service() {
         startForegroundServiceInternal(notification)
 
         when (action) {
+            ACTION_STOP_ALL_BACKGROUND -> {
+                Log.d(TAG, "ACTION_STOP_ALL_BACKGROUND: Stopping all background alarms and service.")
+                cancelNextNightAlarm()
+                cancelNextUnblockAlarm()
+                if (!prefs.isDetoxActive()) {
+                    stopForeground(STOP_FOREGROUND_REMOVE)
+                    stopSelf()
+                    return START_NOT_STICKY
+                }
+            }
+
             ACTION_START_NIGHT_MONITORING -> {
                 Log.d(TAG, "Night block monitoring initialized.")
                 prefs.setNightMonitoringActive(true)
                 checkNightAndHourlyRules()
+                if (!prefs.isDetoxActive()) {
+                    stopForeground(STOP_FOREGROUND_REMOVE)
+                    stopSelf()
+                    return START_NOT_STICKY
+                }
             }
 
             ACTION_START_HOURLY_MONITORING -> {
                 Log.d(TAG, "Hourly monitoring initialized.")
                 prefs.setHourlyMonitoringActive(true)
                 checkNightAndHourlyRules()
+                if (!prefs.isDetoxActive()) {
+                    stopForeground(STOP_FOREGROUND_REMOVE)
+                    stopSelf()
+                    return START_NOT_STICKY
+                }
             }
 
             ACTION_STOP_MONITORING -> {
@@ -172,6 +218,11 @@ open class DetoxTimerService : Service() {
                     prefs.setHourlyCycleStartMap(emptyMap())
                     cancelNextUnblockAlarm()
                 }
+                if (!prefs.isDetoxActive() && !prefs.isHourlyLockedState()) {
+                    stopForeground(STOP_FOREGROUND_REMOVE)
+                    stopSelf()
+                    return START_NOT_STICKY
+                }
             }
 
             ACTION_STOP_NIGHT_MONITORING -> {
@@ -189,10 +240,20 @@ open class DetoxTimerService : Service() {
                     }
                     cancelNextNightAlarm()
                 }
+                if (!prefs.isDetoxActive() && !(prefs.isNightLockedState() && prefs.isNightBlockActiveNow())) {
+                    stopForeground(STOP_FOREGROUND_REMOVE)
+                    stopSelf()
+                    return START_NOT_STICKY
+                }
             }
 
             ACTION_EVALUATE_RULES -> {
                 checkNightAndHourlyRules()
+                if (!prefs.isDetoxActive()) {
+                    stopForeground(STOP_FOREGROUND_REMOVE)
+                    stopSelf()
+                    return START_NOT_STICKY
+                }
             }
 
             else -> {
@@ -201,6 +262,9 @@ open class DetoxTimerService : Service() {
                     startCountdown(prefs.getDetoxEndTime() - System.currentTimeMillis())
                 } else {
                     checkNightAndHourlyRules()
+                    stopForeground(STOP_FOREGROUND_REMOVE)
+                    stopSelf()
+                    return START_NOT_STICKY
                 }
             }
         }

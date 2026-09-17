@@ -189,7 +189,14 @@ fun AppPickerBottomSheet(
 
                                 Switch(
                                     checked = isSelected,
-                                    onCheckedChange = { onPackageToggled(app.packageName) }
+                                    onCheckedChange = { onPackageToggled(app.packageName) },
+                                    colors = SwitchDefaults.colors(
+                                        checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
+                                        checkedTrackColor = MaterialTheme.colorScheme.primary,
+                                        uncheckedThumbColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        uncheckedTrackColor = MaterialTheme.colorScheme.surfaceVariant,
+                                        uncheckedBorderColor = MaterialTheme.colorScheme.outline
+                                    )
                                 )
                             }
                         }

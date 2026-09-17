@@ -208,7 +208,14 @@ fun NightRuleScreen(preferences: DetoxPreferences) {
                                     Toast.makeText(context, "Scheduled locked state cleared", Toast.LENGTH_SHORT).show()
                                 }
                             }
-                        }
+                        },
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
+                            checkedTrackColor = MaterialTheme.colorScheme.primary,
+                            uncheckedThumbColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                            uncheckedTrackColor = MaterialTheme.colorScheme.surfaceVariant,
+                            uncheckedBorderColor = MaterialTheme.colorScheme.outline
+                        )
                     )
                 }
             }

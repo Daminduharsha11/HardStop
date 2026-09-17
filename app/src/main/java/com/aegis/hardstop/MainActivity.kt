@@ -80,8 +80,10 @@ class MainActivity : ComponentActivity() {
 
         checkShizukuState()
 
-        // Initialize background evaluation for headless service execution
-        com.aegis.hardstop.service.DetoxTimerService.evaluateRules(applicationContext)
+        // Initialize background evaluation for headless service execution if enabled
+        if (preferences.isHeadlessServiceEnabled() || preferences.isDetoxActive() || preferences.isHourlyMonitoringActive() || preferences.isNightMonitoringActive()) {
+            com.aegis.hardstop.service.DetoxTimerService.evaluateRules(applicationContext)
+        }
 
         setContent {
             val context = LocalContext.current
@@ -90,6 +92,7 @@ class MainActivity : ComponentActivity() {
 
             DetoxTheme(themeMode = currentThemeMode) {
                 Scaffold(
+                    containerColor = MaterialTheme.colorScheme.background,
                     bottomBar = {
                         NavigationBar {
                             NavigationBarItem(

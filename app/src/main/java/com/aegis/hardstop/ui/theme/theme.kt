@@ -2,13 +2,16 @@ package com.aegis.hardstop.ui.theme
 
 import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 
@@ -133,10 +136,15 @@ val GoogleAmoledDarkColorScheme = darkColorScheme(
     onBackground = Color(0xFFE1E2E5),
     surface = Color.Black,
     onSurface = Color(0xFFE1E2E5),
-    surfaceVariant = Color(0xFF161616),
-    onSurfaceVariant = Color(0xFFB0B3B8),
-    outline = Color(0xFF33363B),
-    outlineVariant = Color(0xFF222428),
+    surfaceVariant = Color(0xFF1E2125),
+    onSurfaceVariant = Color(0xFFC4C7D0),
+    surfaceContainer = Color(0xFF121417),
+    surfaceContainerHigh = Color(0xFF1B1E22),
+    surfaceContainerHighest = Color(0xFF26292E),
+    surfaceContainerLow = Color(0xFF0A0C0E),
+    surfaceContainerLowest = Color.Black,
+    outline = Color(0xFF8C9199),
+    outlineVariant = Color(0xFF42474E),
     error = Color(0xFFFFB4AB),
     onError = Color(0xFF690005),
     errorContainer = Color(0xFF560005),
@@ -167,7 +175,13 @@ fun DetoxTheme(
     }
 
     MaterialTheme(
-        colorScheme = colorScheme,
-        content = content
-    )
+        colorScheme = colorScheme
+    ) {
+        Surface(
+            modifier = Modifier.fillMaxSize(),
+            color = MaterialTheme.colorScheme.background
+        ) {
+            content()
+        }
+    }
 }
