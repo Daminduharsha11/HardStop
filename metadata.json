@@ -1,0 +1,6 @@
+{
+  "name": "HardStop",
+  "description": "App detox and usage limit enforcer with Shizuku and scheduled blocks",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
