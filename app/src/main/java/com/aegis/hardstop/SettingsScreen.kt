@@ -232,7 +232,7 @@ fun SettingsScreen(
                             }
                         }
                         Text(
-                            text = if (isBatteryOptimizedIgnored) "Background execution unrestricted" else "Optimized (may delay background rules)",
+                            text = if (isBatteryOptimizedIgnored) "Background execution unrestricted" else " (may delay background rules)",
                             fontSize = 12.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
