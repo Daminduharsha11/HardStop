@@ -16,11 +16,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.Font as ComposeFont
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
-import com.example.R
 
 // Google Material 3 Design System - Authentic Cohesive Tones
 
@@ -158,13 +156,8 @@ val GoogleAmoledDarkColorScheme = darkColorScheme(
     onErrorContainer = Color(0xFFFFDAD6)
 )
 
-// Google Font Family - Plus Jakarta Sans
-val PlusJakartaSansFamily = FontFamily(
-    ComposeFont(R.font.plus_jakarta_sans, FontWeight.Normal),
-    ComposeFont(R.font.plus_jakarta_sans, FontWeight.Medium),
-    ComposeFont(R.font.plus_jakarta_sans, FontWeight.SemiBold),
-    ComposeFont(R.font.plus_jakarta_sans, FontWeight.Bold)
-)
+// Google Font Family - SansSerif (Clean, Modern Typography)
+val PlusJakartaSansFamily = FontFamily.SansSerif
 
 val AppTypography = Typography(
     displayLarge = TextStyle(
