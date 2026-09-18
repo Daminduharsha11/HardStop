@@ -6,10 +6,11 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.util.Calendar
 
-class DetoxPreferences(context: Context) {
+class DetoxPreferences(private val context: Context) {
 
-    private val prefs: SharedPreferences =
-        context.getSharedPreferences("aegis_detox_prefs", Context.MODE_PRIVATE)
+    @Suppress("DEPRECATION")
+    private val prefs: SharedPreferences
+        get() = context.getSharedPreferences("aegis_detox_prefs", Context.MODE_MULTI_PROCESS or Context.MODE_PRIVATE)
 
     companion object {
         // Active Lock Keys

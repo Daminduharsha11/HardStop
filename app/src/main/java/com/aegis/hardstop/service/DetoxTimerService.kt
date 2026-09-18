@@ -734,6 +734,13 @@ open class DetoxTimerService : Service() {
 
     override fun onBind(intent: Intent?): IBinder? = null
 
+    override fun onTrimMemory(level: Int) {
+        super.onTrimMemory(level)
+        if (level >= TRIM_MEMORY_BACKGROUND || level >= TRIM_MEMORY_MODERATE) {
+            System.gc()
+        }
+    }
+
     override fun onDestroy() {
         serviceScope.cancel()
         periodicJob?.cancel()

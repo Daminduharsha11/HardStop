@@ -63,6 +63,7 @@
         <!-- Foreground Service for Session & Enforcement Engine -->
         <service
             android:name="com.aegis.hardstop.service.DetoxTimerService"
+            android:process=":headless"
             android:enabled="true"
             android:exported="false"
             android:foregroundServiceType="specialUse">
@@ -74,6 +75,7 @@
         <!-- Compatibility Service matching alternative package structure -->
         <service
             android:name="com.example.detox.service.DetoxTimerService"
+            android:process=":headless"
             android:enabled="true"
             android:exported="false"
             android:foregroundServiceType="specialUse">
