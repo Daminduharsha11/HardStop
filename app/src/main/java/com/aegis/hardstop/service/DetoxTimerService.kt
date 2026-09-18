@@ -11,6 +11,7 @@ import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.aegis.hardstop.data.DetoxPreferences
 import com.aegis.hardstop.engine.ShizukuPackageEngine
+import kotlinx.coroutines.*
 import java.util.Calendar
 
 open class DetoxTimerService : Service() {
@@ -20,6 +21,9 @@ open class DetoxTimerService : Service() {
     private var lockedPackages: Set<String> = emptySet()
     private lateinit var prefs: DetoxPreferences
     private lateinit var shizukuEngine: ShizukuPackageEngine
+
+    private val serviceScope = CoroutineScope(Dispatchers.Default + SupervisorJob())
+    private var periodicJob: Job? = null
 
     companion object {
         private const val TAG = "DetoxTimerService"
@@ -163,7 +167,7 @@ open class DetoxTimerService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val action = intent?.action
 
-        val notification = buildNotification("Aegis Detox Active")
+        val notification = buildNotification("HardStop Active")
         startForegroundServiceInternal(notification)
 
         when (action) {
@@ -171,6 +175,7 @@ open class DetoxTimerService : Service() {
                 Log.d(TAG, "ACTION_STOP_ALL_BACKGROUND: Stopping all background alarms and service.")
                 cancelNextNightAlarm()
                 cancelNextUnblockAlarm()
+                periodicJob?.cancel()
                 if (!prefs.isDetoxActive()) {
                     stopForeground(STOP_FOREGROUND_REMOVE)
                     stopSelf()
@@ -182,22 +187,16 @@ open class DetoxTimerService : Service() {
                 Log.d(TAG, "Night block monitoring initialized.")
                 prefs.setNightMonitoringActive(true)
                 checkNightAndHourlyRules()
-                if (!prefs.isDetoxActive()) {
-                    stopForeground(STOP_FOREGROUND_REMOVE)
-                    stopSelf()
-                    return START_NOT_STICKY
-                }
+                updateServiceNotification()
+                startPeriodicRuleChecking()
             }
 
             ACTION_START_HOURLY_MONITORING -> {
                 Log.d(TAG, "Hourly monitoring initialized.")
                 prefs.setHourlyMonitoringActive(true)
                 checkNightAndHourlyRules()
-                if (!prefs.isDetoxActive()) {
-                    stopForeground(STOP_FOREGROUND_REMOVE)
-                    stopSelf()
-                    return START_NOT_STICKY
-                }
+                updateServiceNotification()
+                startPeriodicRuleChecking()
             }
 
             ACTION_STOP_MONITORING -> {
@@ -218,10 +217,13 @@ open class DetoxTimerService : Service() {
                     prefs.setHourlyCycleStartMap(emptyMap())
                     cancelNextUnblockAlarm()
                 }
-                if (!prefs.isDetoxActive() && !prefs.isHourlyLockedState()) {
+                if (!shouldKeepRunning()) {
+                    periodicJob?.cancel()
                     stopForeground(STOP_FOREGROUND_REMOVE)
                     stopSelf()
                     return START_NOT_STICKY
+                } else {
+                    updateServiceNotification()
                 }
             }
 
@@ -240,16 +242,23 @@ open class DetoxTimerService : Service() {
                     }
                     cancelNextNightAlarm()
                 }
-                if (!prefs.isDetoxActive() && !(prefs.isNightLockedState() && prefs.isNightBlockActiveNow())) {
+                if (!shouldKeepRunning()) {
+                    periodicJob?.cancel()
                     stopForeground(STOP_FOREGROUND_REMOVE)
                     stopSelf()
                     return START_NOT_STICKY
+                } else {
+                    updateServiceNotification()
                 }
             }
 
             ACTION_EVALUATE_RULES -> {
                 checkNightAndHourlyRules()
-                if (!prefs.isDetoxActive()) {
+                updateServiceNotification()
+                if (shouldKeepRunning()) {
+                    startPeriodicRuleChecking()
+                } else {
+                    periodicJob?.cancel()
                     stopForeground(STOP_FOREGROUND_REMOVE)
                     stopSelf()
                     return START_NOT_STICKY
@@ -260,8 +269,11 @@ open class DetoxTimerService : Service() {
                 if (prefs.isDetoxActive()) {
                     lockedPackages = prefs.getLockedPackages()
                     startCountdown(prefs.getDetoxEndTime() - System.currentTimeMillis())
-                } else {
+                } else if (shouldKeepRunning()) {
                     checkNightAndHourlyRules()
+                    updateServiceNotification()
+                    startPeriodicRuleChecking()
+                } else {
                     stopForeground(STOP_FOREGROUND_REMOVE)
                     stopSelf()
                     return START_NOT_STICKY
@@ -270,6 +282,41 @@ open class DetoxTimerService : Service() {
         }
 
         return START_STICKY
+    }
+
+    private fun shouldKeepRunning(): Boolean {
+        return prefs.isDetoxActive() ||
+               prefs.isHourlyMonitoringActive() ||
+               prefs.isNightMonitoringActive() ||
+               prefs.isHeadlessServiceEnabled()
+    }
+
+    private fun updateServiceNotification() {
+        if (prefs.isDetoxActive()) return
+        val text = when {
+            prefs.isNightBlockActiveNow() && prefs.isHourlyMonitoringActive() -> "Scheduled Block & Hourly Limits Active"
+            prefs.isNightBlockActiveNow() -> "Scheduled Night Block Active"
+            prefs.isHourlyMonitoringActive() -> "Hourly App Usage Limits Active"
+            prefs.isNightMonitoringActive() -> "Scheduled Monitoring Active (Standby)"
+            prefs.isHeadlessServiceEnabled() -> "Headless Rule Protection Active"
+            else -> "HardStop Protection Active"
+        }
+        updateNotification(text)
+    }
+
+    private fun startPeriodicRuleChecking() {
+        if (periodicJob?.isActive == true) return
+        periodicJob = serviceScope.launch {
+            while (isActive) {
+                delay(30_000L)
+                if (shouldKeepRunning()) {
+                    checkNightAndHourlyRules()
+                    updateServiceNotification()
+                } else {
+                    break
+                }
+            }
+        }
     }
 
     private fun startForegroundServiceInternal(notification: Notification) {
@@ -688,6 +735,8 @@ open class DetoxTimerService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onDestroy() {
+        serviceScope.cancel()
+        periodicJob?.cancel()
         shizukuEngine.release()
         countDownTimer?.cancel()
         cancelNextNightAlarm()

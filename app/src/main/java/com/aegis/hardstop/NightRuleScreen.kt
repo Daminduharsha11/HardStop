@@ -411,8 +411,8 @@ fun NightRuleScreen(preferences: DetoxPreferences) {
                 else -> MaterialTheme.colorScheme.onPrimaryContainer
             },
             modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .padding(bottom = 16.dp)
+                .align(Alignment.BottomEnd)
+                .padding(end = 20.dp, bottom = 20.dp)
         )
     }
 
