@@ -1,6 +1,5 @@
 package com.aegis.hardstop
 
-import com.example.R
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
