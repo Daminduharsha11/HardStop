@@ -1,18 +1,12 @@
 package com.aegis.hardstop.ui.theme
 
-import androidx.compose.material3.Typography
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.Font
-import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.sp
-import com.example.R
 import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
@@ -21,9 +15,12 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.Font
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.Font as ComposeFont
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.sp
+import com.example.R
 
 // Google Material 3 Design System - Authentic Cohesive Tones
 
@@ -163,10 +160,10 @@ val GoogleAmoledDarkColorScheme = darkColorScheme(
 
 // Google Font Family - Plus Jakarta Sans
 val PlusJakartaSansFamily = FontFamily(
-    Font(R.font.plus_jakarta_sans, FontWeight.Normal),
-    Font(R.font.plus_jakarta_sans, FontWeight.Medium),
-    Font(R.font.plus_jakarta_sans, FontWeight.SemiBold),
-    Font(R.font.plus_jakarta_sans, FontWeight.Bold)
+    ComposeFont(R.font.plus_jakarta_sans, FontWeight.Normal),
+    ComposeFont(R.font.plus_jakarta_sans, FontWeight.Medium),
+    ComposeFont(R.font.plus_jakarta_sans, FontWeight.SemiBold),
+    ComposeFont(R.font.plus_jakarta_sans, FontWeight.Bold)
 )
 
 val AppTypography = Typography(
